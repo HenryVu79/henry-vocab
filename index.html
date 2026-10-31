@@ -232,7 +232,7 @@
   <div class="tab active" data-tab="flashcard">🃏 Flashcard</div>
   <div class="tab" data-tab="vocab-list">📚 Từ vựng</div>
   <div class="tab" data-tab="phrases">💬 Mẫu câu</div>
-  <div class="tab" data-tab="autoplay">▶️ Auto-play</div>
+  <div class="tab" data-tab="autoplay">▶️ Auto-play <span id="ap-badge" style="display:none;background:#22c55e;color:#fff;border-radius:10px;padding:2px 6px;font-size:.65rem;font-weight:bold;margin-left:4px;">ĐANG BẬT</span></div>
 </div>
 
 <div class="content">
@@ -446,6 +446,10 @@ function speak(text, lang = 'en-US', onEnd = null) {
 }
 
 function speakFromList(text, lang) {
+  if (apRunning) {
+    toast("⚠️ Auto-play đang chạy! Hãy bấm 'Dừng' ở tab Auto-play trước.");
+    return;
+  }
   stopAllAudio();
   speak(text, lang);
 }
@@ -703,16 +707,16 @@ function showCard(idx) {
   });
   document.getElementById('reveal-btn').classList.remove('hidden');
 
-  // Dừng phát âm cũ ngay lập tức
-  stopAllAudio();
-
-  // Đợi 220ms debounce: khi bấm Next liên tục sẽ không bị delay hay đọc lại từ cũ
-  const thisToken = speechToken;
-  cardSpeakTimer = setTimeout(() => {
-    if (thisToken === speechToken && !apRunning) {
-      speak(card.word, 'en-US');
-    }
-  }, 220);
+  // Nếu Auto-play KHÔNG chạy thì mới tự động phát âm Flashcard
+  if (!apRunning) {
+    stopAllAudio();
+    const thisToken = speechToken;
+    cardSpeakTimer = setTimeout(() => {
+      if (thisToken === speechToken && !apRunning) {
+        speak(card.word, 'en-US');
+      }
+    }, 220);
+  }
 }
 
 function revealCard() {
@@ -727,16 +731,28 @@ function nextCard() { showCard(fcIndex + 1); }
 function prevCard() { showCard(fcIndex - 1); }
 
 function speakCurrentWord() {
+  if (apRunning) {
+    toast("⚠️ Auto-play đang chạy! Hãy bấm 'Dừng' ở tab Auto-play trước.");
+    return;
+  }
   clearTimeout(cardSpeakTimer);
   stopAllAudio();
   if (currentFcList[fcIndex]) speak(currentFcList[fcIndex].word, 'en-US');
 }
 function speakCurrentMeaning() {
+  if (apRunning) {
+    toast("⚠️ Auto-play đang chạy! Hãy bấm 'Dừng' ở tab Auto-play trước.");
+    return;
+  }
   clearTimeout(cardSpeakTimer);
   stopAllAudio();
   if (currentFcList[fcIndex]) speak(currentFcList[fcIndex].meaning, 'vi-VN');
 }
 function speakCurrentExample() {
+  if (apRunning) {
+    toast("⚠️ Auto-play đang chạy! Hãy bấm 'Dừng' ở tab Auto-play trước.");
+    return;
+  }
   clearTimeout(cardSpeakTimer);
   stopAllAudio();
   if (currentFcList[fcIndex]) speak(currentFcList[fcIndex].example, 'en-US');
@@ -853,22 +869,29 @@ function startAutoplay() {
     }
   });
 
+  clearTimeout(cardSpeakTimer);
+  stopAllAudio();
+
   apRunning = true;
   apCurIdx = 0;
   document.getElementById('ap-start-btn').classList.add('hidden');
   document.getElementById('ap-stop-btn').classList.remove('hidden');
+  const badge = document.getElementById('ap-badge');
+  if (badge) badge.style.display = 'inline-block';
+  toast("▶ Đã bật Auto-play! Chuyển tab nghe bình thường.");
   playNextAp();
 }
 
 function stopAutoplay() {
   apRunning = false;
   clearTimeout(apTimer);
-  if ('speechSynthesis' in window) window.speechSynthesis.cancel();
-  const audio = document.getElementById('global-audio');
-  if (audio) { audio.pause(); audio.src = ''; }
+  stopAllAudio();
   document.getElementById('ap-start-btn').classList.remove('hidden');
   document.getElementById('ap-stop-btn').classList.add('hidden');
   document.getElementById('ap-status').textContent = 'Đã dừng';
+  const badge = document.getElementById('ap-badge');
+  if (badge) badge.style.display = 'none';
+  toast("⏹ Đã dừng Auto-play.");
 }
 
 function playNextAp() {
