@@ -330,28 +330,91 @@
 </div>
 
 <div id="toast"></div>
+<audio id="global-audio" preload="auto"></audio>
 
 <script>
 // ───────────────────────────────────────────────────────────
-// WEB SPEECH API (Native Browser Text-to-Speech)
+// HYBRID TTS ENGINE (Web Speech API + Google TTS Online Fallback)
+// Hoạt động 100% trên cả iPhone, Android, Zalo, máy tính
 // ───────────────────────────────────────────────────────────
-function speak(text, lang = 'en-US', rate = 0.9) {
-  if (!('speechSynthesis' in window)) {
-    toast('Trình duyệt không hỗ trợ Web Speech');
-    return;
-  }
-  window.speechSynthesis.cancel(); // Dừng câu trước đó nếu đang đọc
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = lang;
-  utterance.rate = rate;
-
-  // Cố gắng chọn voice chuẩn nếu có
-  const voices = window.speechSynthesis.getVoices();
-  const matchedVoice = voices.find(v => v.lang.startsWith(lang.split('-')[0]));
-  if (matchedVoice) utterance.voice = matchedVoice;
-
-  window.speechSynthesis.speak(utterance);
+function getTTSUrl(text, lang) {
+  let tl = 'en';
+  if (lang.startsWith('vi')) tl = 'vi';
+  else if (lang.startsWith('zh')) tl = 'zh-CN';
+  return `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=${tl}&q=${encodeURIComponent(text.trim())}`;
 }
+
+function playAudioFallback(text, lang, onEnd = null) {
+  const audio = document.getElementById('global-audio');
+  if (!audio) return;
+  audio.pause();
+  audio.src = getTTSUrl(text, lang);
+  if (onEnd) {
+    audio.onended = () => { onEnd(); };
+    audio.onerror = () => { onEnd(); };
+  } else {
+    audio.onended = null;
+    audio.onerror = null;
+  }
+  audio.play().catch(err => {
+    console.log("Audio play deferred or blocked:", err);
+    if (onEnd) onEnd();
+  });
+}
+
+function speak(text, lang = 'en-US', onEnd = null) {
+  if (!text) { if (onEnd) onEnd(); return; }
+  // Làm sạch text
+  const clean = text.replace(/\/[^\/]+\//g, '').replace(/["'“”]/g, '').trim();
+
+  // Kiểm tra nếu thiết bị hỗ trợ Web Speech
+  if ('speechSynthesis' in window) {
+    try {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(clean);
+      utterance.lang = lang;
+      utterance.rate = 0.9;
+
+      let hasFiredEnd = false;
+      utterance.onend = () => {
+        if (!hasFiredEnd) {
+          hasFiredEnd = true;
+          if (onEnd) onEnd();
+        }
+      };
+      utterance.onerror = (e) => {
+        if (!hasFiredEnd) {
+          hasFiredEnd = true;
+          playAudioFallback(clean, lang, onEnd);
+        }
+      };
+
+      // Gán voice nếu có
+      const voices = window.speechSynthesis.getVoices();
+      if (voices && voices.length > 0) {
+        const matched = voices.find(v => v.lang.startsWith(lang.split('-')[0]));
+        if (matched) utterance.voice = matched;
+      }
+
+      window.speechSynthesis.speak(utterance);
+      return;
+    } catch (err) {
+      console.warn("SpeechSynthesis error, falling back:", err);
+    }
+  }
+
+  // Fallback sang online audio (chạy tốt trên mọi trình duyệt điện thoại)
+  playAudioFallback(clean, lang, onEnd);
+}
+
+// Mở khóa audio cho trình duyệt di động khi người dùng chạm lần đầu
+document.addEventListener('touchstart', function unlockAudio() {
+  const audio = document.getElementById('global-audio');
+  if (audio) {
+    audio.play().then(() => audio.pause()).catch(() => {});
+  }
+  document.removeEventListener('touchstart', unlockAudio);
+}, { once: true });
 
 // ───────────────────────────────────────────────────────────
 // DATA & STATE
@@ -743,7 +806,9 @@ function startAutoplay() {
 function stopAutoplay() {
   apRunning = false;
   clearTimeout(apTimer);
-  window.speechSynthesis.cancel();
+  if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+  const audio = document.getElementById('global-audio');
+  if (audio) { audio.pause(); audio.src = ''; }
   document.getElementById('ap-start-btn').classList.remove('hidden');
   document.getElementById('ap-stop-btn').classList.add('hidden');
   document.getElementById('ap-status').textContent = 'Đã dừng';
@@ -767,18 +832,10 @@ function playNextAp() {
     ${item.example ? `<div class="fc-example" style="display:block;margin-top:8px;">"${item.example}"</div>` : ''}
   `;
 
-  const utterance = new SpeechSynthesisUtterance(cur.text);
-  utterance.lang = cur.lang;
-  utterance.rate = 0.9;
-  utterance.onend = () => {
+  speak(cur.text, cur.lang, () => {
     apCurIdx++;
-    apTimer = setTimeout(playNextAp, 900);
-  };
-  utterance.onerror = () => {
-    apCurIdx++;
-    apTimer = setTimeout(playNextAp, 500);
-  };
-  window.speechSynthesis.speak(utterance);
+    apTimer = setTimeout(playNextAp, 850);
+  });
 }
 
 // ───────────────────────────────────────────────────────────
