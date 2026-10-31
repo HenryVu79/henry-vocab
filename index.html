@@ -342,6 +342,9 @@
 // HYBRID TTS ENGINE (Web Speech API + Google TTS Online Fallback)
 // Hoạt động 100% trên cả iPhone, Android, Zalo, máy tính
 // ───────────────────────────────────────────────────────────
+let speechToken = 0;
+let cardSpeakTimer = null;
+
 function getTTSUrl(text, lang) {
   let tl = 'en';
   if (lang.startsWith('vi')) tl = 'vi';
@@ -349,36 +352,62 @@ function getTTSUrl(text, lang) {
   return `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=${tl}&q=${encodeURIComponent(text.trim())}`;
 }
 
-function playAudioFallback(text, lang, onEnd = null) {
+function stopAllAudio() {
+  speechToken++;
+  clearTimeout(cardSpeakTimer);
+  if ('speechSynthesis' in window) {
+    try { window.speechSynthesis.cancel(); } catch (e) {}
+  }
+  const audio = document.getElementById('global-audio');
+  if (audio) {
+    try {
+      audio.pause();
+      audio.currentTime = 0;
+      audio.removeAttribute('src');
+      audio.onended = null;
+      audio.onerror = null;
+    } catch (e) {}
+  }
+}
+
+function playAudioFallback(text, lang, onEnd = null, myToken = 0) {
   try {
     const audio = document.getElementById('global-audio') || new Audio();
     audio.referrerPolicy = "no-referrer";
     audio.src = getTTSUrl(text, lang);
     if (onEnd) {
-      audio.onended = () => { onEnd(); };
-      audio.onerror = () => { onEnd(); };
+      audio.onended = () => { if (myToken === speechToken) onEnd(); };
+      audio.onerror = () => { if (myToken === speechToken) onEnd(); };
     } else {
       audio.onended = null;
       audio.onerror = null;
     }
     audio.play().catch(err => {
       console.log("Audio play deferred or blocked:", err);
-      if (onEnd) onEnd();
+      if (onEnd && myToken === speechToken) onEnd();
     });
   } catch (e) {
-    if (onEnd) onEnd();
+    if (onEnd && myToken === speechToken) onEnd();
   }
 }
 
 function speak(text, lang = 'en-US', onEnd = null) {
   if (!text) { if (onEnd) onEnd(); return; }
-  // Làm sạch text
   const clean = text.replace(/\/[^\/]+\//g, '').replace(/["'“”]/g, '').trim();
+  const currentToken = ++speechToken;
+
+  // Dừng phát âm cũ ngay lập tức
+  if ('speechSynthesis' in window) {
+    try { window.speechSynthesis.cancel(); } catch (e) {}
+  }
+  const oldAudio = document.getElementById('global-audio');
+  if (oldAudio) {
+    try { oldAudio.pause(); oldAudio.currentTime = 0; } catch (e) {}
+  }
 
   // Kiểm tra nếu thiết bị hỗ trợ Web Speech
   if ('speechSynthesis' in window) {
     try {
-      window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(clean);
       utterance.lang = lang;
       utterance.rate = 0.9;
@@ -387,17 +416,18 @@ function speak(text, lang = 'en-US', onEnd = null) {
       utterance.onend = () => {
         if (!hasFiredEnd) {
           hasFiredEnd = true;
-          if (onEnd) onEnd();
+          if (currentToken === speechToken && onEnd) onEnd();
         }
       };
       utterance.onerror = (e) => {
         if (!hasFiredEnd) {
           hasFiredEnd = true;
-          playAudioFallback(clean, lang, onEnd);
+          if (currentToken === speechToken) {
+            playAudioFallback(clean, lang, onEnd, currentToken);
+          }
         }
       };
 
-      // Gán voice nếu có
       const voices = window.speechSynthesis.getVoices();
       if (voices && voices.length > 0) {
         const matched = voices.find(v => v.lang.startsWith(lang.split('-')[0]));
@@ -411,8 +441,13 @@ function speak(text, lang = 'en-US', onEnd = null) {
     }
   }
 
-  // Fallback sang online audio (chạy tốt trên mọi trình duyệt điện thoại)
-  playAudioFallback(clean, lang, onEnd);
+  // Fallback sang online audio
+  playAudioFallback(clean, lang, onEnd, currentToken);
+}
+
+function speakFromList(text, lang) {
+  stopAllAudio();
+  speak(text, lang);
 }
 
 // Mở khóa audio cho trình duyệt di động khi người dùng chạm lần đầu
@@ -668,8 +703,16 @@ function showCard(idx) {
   });
   document.getElementById('reveal-btn').classList.remove('hidden');
 
-  // Tự động phát âm tiếng Anh
-  speak(card.word, 'en-US');
+  // Dừng phát âm cũ ngay lập tức
+  stopAllAudio();
+
+  // Đợi 220ms debounce: khi bấm Next liên tục sẽ không bị delay hay đọc lại từ cũ
+  const thisToken = speechToken;
+  cardSpeakTimer = setTimeout(() => {
+    if (thisToken === speechToken && !apRunning) {
+      speak(card.word, 'en-US');
+    }
+  }, 220);
 }
 
 function revealCard() {
@@ -684,12 +727,18 @@ function nextCard() { showCard(fcIndex + 1); }
 function prevCard() { showCard(fcIndex - 1); }
 
 function speakCurrentWord() {
+  clearTimeout(cardSpeakTimer);
+  stopAllAudio();
   if (currentFcList[fcIndex]) speak(currentFcList[fcIndex].word, 'en-US');
 }
 function speakCurrentMeaning() {
+  clearTimeout(cardSpeakTimer);
+  stopAllAudio();
   if (currentFcList[fcIndex]) speak(currentFcList[fcIndex].meaning, 'vi-VN');
 }
 function speakCurrentExample() {
+  clearTimeout(cardSpeakTimer);
+  stopAllAudio();
   if (currentFcList[fcIndex]) speak(currentFcList[fcIndex].example, 'en-US');
 }
 
@@ -741,8 +790,8 @@ function renderVocabGrid() {
           ${v.example ? `<div class="vc-example">"${v.example}"<br><span style="color:#7c3aed">${v.example_vi||''}</span></div>` : ''}
         </div>
         <div class="vc-actions">
-          <button class="audio-btn en" onclick="speak('${v.word.replace(/'/g, "\\'")}', 'en-US')">🔊 EN</button>
-          <button class="audio-btn vi" onclick="speak('${v.meaning.replace(/'/g, "\\'")}', 'vi-VN')">🔊 VI</button>
+          <button class="audio-btn en" onclick="speakFromList('${v.word.replace(/'/g, "\\'")}', 'en-US')">🔊 EN</button>
+          <button class="audio-btn vi" onclick="speakFromList('${v.meaning.replace(/'/g, "\\'")}', 'vi-VN')">🔊 VI</button>
         </div>
       </div>
     `;
@@ -775,8 +824,8 @@ function renderPhraseGrid() {
         ${p.used === 'Có' ? '✅ Đã dùng thực tế' : '⏳ Chưa dùng thực tế'}
       </div>
       <div style="display:flex;gap:6px;margin-top:8px;">
-        <button class="audio-btn en" onclick="speak('${p.phrase.replace(/'/g, "\\'")}', 'en-US')">🔊 Nghe (EN)</button>
-        <button class="audio-btn vi" onclick="speak('${p.meaning.replace(/'/g, "\\'")}', 'vi-VN')">🔊 Nghĩa (VI)</button>
+        <button class="audio-btn en" onclick="speakFromList('${p.phrase.replace(/'/g, "\\'")}', 'en-US')">🔊 Nghe (EN)</button>
+        <button class="audio-btn vi" onclick="speakFromList('${p.meaning.replace(/'/g, "\\'")}', 'vi-VN')">🔊 Nghĩa (VI)</button>
       </div>
     </div>
   `).join('');
@@ -851,6 +900,13 @@ function playNextAp() {
 // ───────────────────────────────────────────────────────────
 document.querySelectorAll('.tab').forEach(tab => {
   tab.addEventListener('click', () => {
+    // Nếu Auto-Play KHÔNG chạy: dừng ngay lập tức toàn bộ âm thanh đang phát
+    if (!apRunning) {
+      clearTimeout(cardSpeakTimer);
+      stopAllAudio();
+    }
+    // Nếu Auto-Play ĐANG chạy: giữ nguyên để Auto-Play tiếp tục đọc liên tục cho tới khi người dùng bấm Dừng
+
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     tab.classList.add('active');
     const tabName = tab.dataset.tab;
