@@ -4,7 +4,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- Google TTS trả 404 nếu request có Referer từ site khác -->
   <meta name="referrer" content="no-referrer" />
+  <link rel="icon" href="data:," />
   <title>Henry Vocab — Học Từ Vựng Online 🎯</title>
   <style>
     :root {
@@ -524,6 +526,37 @@
       color: #475569;
       font-style: italic;
       margin-top: 3px;
+    }
+
+    /* NHÓM "VÍ DỤ THÊM" TRÊN FLASHCARD */
+    .fc-extra-box {
+      background: #f0fdf4;
+      border-color: #4ade80;
+    }
+
+    .fc-extra-box .fc-related-title {
+      color: #15803d;
+    }
+
+    .fc-extra-box .fc-related-item {
+      border-bottom-color: rgba(74, 222, 128, 0.35);
+    }
+
+    .fc-more-btn {
+      margin-top: 8px;
+      padding: 5px 10px;
+      border-radius: 8px;
+      border: 1px solid #86efac;
+      background: #fff;
+      color: #15803d;
+      font-size: .75rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    /* NHÃN NGẮN CHỈ HIỆN TRÊN ĐIỆN THOẠI */
+    .lbl-short {
+      display: none;
     }
 
     .sentence-blank {
@@ -1055,40 +1088,155 @@
       color: #fde047;
     }
 
-    /* RESPONSIVE < 480px */
-    @media (max-width: 480px) {
+    /* RESPONSIVE ĐIỆN THOẠI (<= 600px) */
+    @media (max-width: 600px) {
+      .lbl-long {
+        display: none;
+      }
+
+      .lbl-short {
+        display: inline;
+      }
+
+      /* Header một hàng */
       header {
-        padding: 12px 14px;
+        padding: 8px 12px;
+        flex-wrap: nowrap;
+        gap: 8px;
+      }
+
+      header h1 {
+        font-size: 1rem;
+        white-space: nowrap;
+      }
+
+      header .sub {
+        display: none;
       }
 
       .header-actions {
-        width: 100%;
-        justify-content: space-between;
+        flex-wrap: nowrap;
+        gap: 6px;
+        flex-shrink: 0;
       }
 
+      .lang-btn {
+        padding: 4px 9px;
+        font-size: .78rem;
+      }
+
+      .lang-btn+.lang-btn {
+        margin-left: 1px;
+      }
+
+      .btn-action {
+        padding: 5px 8px;
+      }
+
+      .sync-indicator {
+        padding: 2px 5px;
+      }
+
+      .sync-text {
+        display: none;
+      }
+
+      /* Thống kê: 1 hàng 4 ô */
       .stats-bar {
         display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        gap: 8px;
-        padding: 10px 12px;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 6px;
+        padding: 6px 10px;
+        overflow: visible;
       }
 
       .stat-card {
         min-width: 0;
+        padding: 4px 2px;
+        border-radius: 8px;
       }
 
+      .stat-card .val {
+        font-size: 1.1rem;
+        line-height: 1.2;
+      }
+
+      .stat-card .lbl {
+        font-size: .64rem;
+        margin-top: 0;
+        white-space: nowrap;
+      }
+
+      /* 4 tab chia đều, không cuộn ngang */
       .tabs {
-        padding: 0 8px;
+        padding: 0;
+        overflow: hidden;
       }
 
       .tab {
-        padding: 10px 12px;
-        font-size: .82rem;
+        flex: 1;
+        min-width: 0;
+        padding: 9px 2px;
+        font-size: .8rem;
+        text-align: center;
+      }
+
+      .tab-badge {
+        width: 8px;
+        height: 8px;
+        padding: 0;
+        margin-left: 3px;
+        border-radius: 50%;
+        font-size: 0;
+        line-height: 0;
+      }
+
+      .content {
+        padding: 8px 10px;
+      }
+
+      /* Khối điều khiển Flashcard gọn lại */
+      #tab-flashcard .controls {
+        gap: 6px;
+        padding: 8px;
+        margin-bottom: 8px;
+      }
+
+      #tab-flashcard .mode-btns {
+        flex: 0 0 100%;
+        flex-wrap: nowrap;
+      }
+
+      #tab-flashcard .mode-btn {
+        flex: 1;
+        justify-content: center;
+        padding: 6px 4px;
+        font-size: .78rem;
+        white-space: nowrap;
+      }
+
+      #fc-topic-filter {
+        flex: 1;
+        min-width: 0;
+        padding: 6px 8px;
+        font-size: .78rem;
+      }
+
+      #tab-flashcard .tool-btn {
+        padding: 6px 8px;
+        font-size: .76rem;
+        white-space: nowrap;
       }
 
       .flashcard {
-        padding: 26px 16px;
-        min-height: 280px;
+        padding: 34px 14px 16px;
+        min-height: 240px;
+        gap: 8px;
+        margin-bottom: 10px;
+      }
+
+      .fc-topic {
+        margin-top: 0;
       }
 
       .fc-word {
@@ -1097,10 +1245,6 @@
 
       .fc-word.zh {
         font-size: 2.2rem;
-      }
-
-      .content {
-        padding: 12px 10px;
       }
     }
   </style>
@@ -1120,40 +1264,46 @@
     </div>
     <div class="header-actions">
       <div class="lang-switcher">
-        <button class="lang-btn active" id="btn-lang-en" data-action="switch-lang" data-lang="en">🇬🇧 Tiếng
-          Anh</button>
-        <button class="lang-btn" id="btn-lang-zh" data-action="switch-lang" data-lang="zh">🇨🇳 Tiếng Trung</button>
+        <button class="lang-btn active" id="btn-lang-en" data-action="switch-lang" data-lang="en"><span
+            class="lbl-long">🇬🇧 Tiếng Anh</span><span class="lbl-short">EN</span></button>
+        <button class="lang-btn" id="btn-lang-zh" data-action="switch-lang" data-lang="zh"><span class="lbl-long">🇨🇳
+            Tiếng Trung</span><span class="lbl-short">中</span></button>
       </div>
-      <span id="sync-status" class="sync-indicator sync-ok" title="Trạng thái đồng bộ với Google Sheet">☁️ Đã đồng
-        bộ</span>
-      <button class="btn-action" data-action="refresh-sheet">🔄 Tải lại</button>
+      <span id="sync-status" class="sync-indicator sync-ok" title="Trạng thái đồng bộ với Google Sheet"><span
+          class="sync-icon">☁️</span><span class="sync-text">Đã đồng bộ</span></span>
+      <button class="btn-action" data-action="refresh-sheet" title="Tải lại dữ liệu">🔄<span class="lbl-long"> Tải
+          lại</span></button>
     </div>
   </header>
 
   <div class="stats-bar">
     <div class="stat-card">
       <div class="val" id="s-vocab">0</div>
-      <div class="lbl">Tổng từ vựng</div>
+      <div class="lbl"><span class="lbl-long">Tổng từ vựng</span><span class="lbl-short">Từ</span></div>
     </div>
     <div class="stat-card">
       <div class="val" id="s-today">0</div>
-      <div class="lbl">Bộ hôm nay</div>
+      <div class="lbl"><span class="lbl-long">Bộ hôm nay</span><span class="lbl-short">Hôm nay</span></div>
     </div>
     <div class="stat-card">
       <div class="val" id="s-mastered">0</div>
-      <div class="lbl">Đã nhớ chắc (Lv 4-5)</div>
+      <div class="lbl"><span class="lbl-long">Đã nhớ chắc (Lv 4-5)</span><span class="lbl-short">Nhớ chắc</span></div>
     </div>
     <div class="stat-card">
       <div class="val" id="s-phrases">0</div>
-      <div class="lbl">Mẫu câu</div>
+      <div class="lbl"><span class="lbl-long">Mẫu câu</span><span class="lbl-short">Câu</span></div>
     </div>
   </div>
 
   <div class="tabs" id="main-tabs">
-    <div class="tab active" data-tab="flashcard">🃏 Flashcard</div>
-    <div class="tab" data-tab="vocab-list">📚 Từ vựng</div>
-    <div class="tab" data-tab="phrases">💬 Mẫu câu</div>
-    <div class="tab" data-tab="autoplay">▶️ Auto-play <span id="ap-badge" class="tab-badge">ĐANG BẬT</span></div>
+    <div class="tab active" data-tab="flashcard"><span class="lbl-long">🃏 Flashcard</span><span class="lbl-short">🃏
+        Thẻ</span></div>
+    <div class="tab" data-tab="vocab-list"><span class="lbl-long">📚 Từ vựng</span><span class="lbl-short">📚 Từ</span>
+    </div>
+    <div class="tab" data-tab="phrases"><span class="lbl-long">💬 Mẫu câu</span><span class="lbl-short">💬 Câu</span>
+    </div>
+    <div class="tab" data-tab="autoplay"><span class="lbl-long">▶️ Auto-play</span><span class="lbl-short">▶️ Tự
+        đọc</span> <span id="ap-badge" class="tab-badge">ĐANG BẬT</span></div>
   </div>
 
   <div class="content">
@@ -1162,9 +1312,10 @@
     <div id="tab-flashcard">
       <div class="controls">
         <div class="mode-btns">
-          <button class="mode-btn active" data-action="fc-mode" data-fc-mode="all">Tất cả</button>
-          <button class="mode-btn" data-action="fc-mode" data-fc-mode="today">Bộ hôm nay</button>
-          <button class="mode-btn" data-action="fc-mode" data-fc-mode="review">Cần ôn (Lv < 4)</button>
+          <button class="mode-btn" data-action="fc-mode" data-fc-mode="all">Tất cả</button>
+          <button class="mode-btn active" data-action="fc-mode" data-fc-mode="today">Bộ hôm nay</button>
+          <button class="mode-btn" data-action="fc-mode" data-fc-mode="review">Cần ôn<span class="lbl-long"> (Lv &lt;
+              4)</span></button>
         </div>
         <select id="fc-topic-filter">
           <option value="">Tất cả chủ đề</option>
@@ -1212,6 +1363,12 @@
             <div class="fc-related-box hidden" id="fc-related-box">
               <div class="fc-related-title">💬 Mẫu câu dùng từ này:</div>
               <div id="fc-related-list"></div>
+            </div>
+            <!-- Ví dụ thêm -->
+            <div class="fc-related-box fc-extra-box hidden" id="fc-extra-box">
+              <div class="fc-related-title">➕ Ví dụ thêm:</div>
+              <div id="fc-extra-list"></div>
+              <button class="fc-more-btn hidden" id="fc-more-btn" data-action="fc-more-examples"></button>
             </div>
           </div>
 
@@ -1268,6 +1425,7 @@
         <select id="phrase-type-filter">
           <option value="">Tất cả loại</option>
           <option value="Gắn với từ">Gắn với từ</option>
+          <option value="Ví dụ thêm">Ví dụ thêm</option>
           <option value="Câu giao tiếp chung">Câu giao tiếp chung</option>
         </select>
         <select id="phrase-situation">
@@ -1327,6 +1485,8 @@
       zh: "1fqfwwbtP5S9eiFtyVwCIL7CyKz0_mjkES3X25nfhmbY"
     };
 
+    const FC_EXTRA_PREVIEW = 3; // Số "Ví dụ thêm" hiện sẵn trên Flashcard
+
     // ───────────────────────────────────────────────────────────
     // TIỆN ÍCH NGÀY THÁNG THEO GIỜ VIỆT NAM (Asia/Ho_Chi_Minh)
     // ───────────────────────────────────────────────────────────
@@ -1385,23 +1545,134 @@
     }
 
     function playAudioFallback(text, lang, onEnd = null, myToken = 0) {
+      // Một lỗi có thể kích hoạt cả onerror lẫn play().catch: chỉ gọi onEnd đúng 1 lần
+      let finished = false;
+      const finish = () => {
+        if (finished) return;
+        finished = true;
+        if (onEnd && myToken === speechToken) onEnd();
+      };
+
       try {
         const audio = document.getElementById('global-audio') || new Audio();
-        audio.referrerPolicy = "no-referrer";
+        audio.onended = finish;
+        audio.onerror = finish;
         audio.src = getTTSUrl(text, lang);
-        if (onEnd) {
-          audio.onended = () => { if (myToken === speechToken) onEnd(); };
-          audio.onerror = () => { if (myToken === speechToken) onEnd(); };
-        } else {
-          audio.onended = null;
-          audio.onerror = null;
-        }
         audio.play().catch(err => {
           console.log("Audio play deferred or blocked:", err);
-          if (onEnd && myToken === speechToken) onEnd();
+          finish();
         });
       } catch (e) {
-        if (onEnd && myToken === speechToken) onEnd();
+        finish();
+      }
+    }
+
+    // Danh sách giọng có thể tải chậm: nghe voiceschanged, sau 300 ms vẫn rỗng thì coi như không có
+    const VOICE_WAIT_MS = 300;
+    const TTS_MAX_LENGTH = 180;
+    let voiceCache = [];
+    let voicesSettled = false;
+    const voiceWaiters = [];
+
+    function settleVoices() {
+      voicesSettled = true;
+      voiceWaiters.splice(0).forEach(fn => fn());
+    }
+
+    function refreshVoices() {
+      try {
+        voiceCache = window.speechSynthesis.getVoices() || [];
+      } catch (e) {
+        voiceCache = [];
+      }
+      if (voiceCache.length > 0) settleVoices();
+    }
+
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.onvoiceschanged = refreshVoices;
+      refreshVoices();
+      setTimeout(settleVoices, VOICE_WAIT_MS);
+    } else {
+      voicesSettled = true;
+    }
+
+    // Trên Android, voice.lang có thể ở dạng vi_VN
+    function getVoiceFor(lang) {
+      const prefix = lang.split('-')[0].toLowerCase();
+      return voiceCache.find(v => (v.lang || '').toLowerCase().split(/[-_]/)[0] === prefix) || null;
+    }
+
+    // Tách câu dài theo dấu câu vì Google TTS giới hạn độ dài
+    function splitForTTS(text, maxLen = TTS_MAX_LENGTH) {
+      if (text.length <= maxLen) return [text];
+
+      const parts = text.match(/[^.!?;:,。！？；：，、\n]+[.!?;:,。！？；：，、\n]*\s*/g) || [text];
+      const segments = [];
+      let current = '';
+
+      parts.forEach(part => {
+        if ((current + part).length <= maxLen) {
+          current += part;
+          return;
+        }
+        if (current.trim()) segments.push(current.trim());
+
+        // Một vế vẫn quá dài: cắt ở khoảng trắng gần nhất
+        let rest = part;
+        while (rest.length > maxLen) {
+          const space = rest.lastIndexOf(' ', maxLen);
+          const cut = space > 0 ? space : maxLen;
+          segments.push(rest.slice(0, cut).trim());
+          rest = rest.slice(cut);
+        }
+        current = rest;
+      });
+
+      if (current.trim()) segments.push(current.trim());
+      return segments;
+    }
+
+    let activeUtterance = null; // Giữ tham chiếu để Chrome không thu hồi và mất sự kiện onend
+
+    function speakWithVoice(text, lang, voice, onEnd, myToken) {
+      let finished = false;
+      const fallback = () => {
+        if (finished) return;
+        finished = true;
+        if (myToken === speechToken) playAudioFallback(text, lang, onEnd, myToken);
+      };
+
+      try {
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = lang;
+        utterance.rate = 0.9;
+        utterance.voice = voice;
+        utterance.onend = () => {
+          if (finished) return;
+          finished = true;
+          if (myToken === speechToken) onEnd();
+        };
+        utterance.onerror = fallback;
+        activeUtterance = utterance;
+        window.speechSynthesis.speak(utterance);
+      } catch (err) {
+        console.warn("SpeechSynthesis error, falling back:", err);
+        fallback();
+      }
+    }
+
+    function playSegments(segments, index, lang, voice, onEnd, myToken) {
+      if (myToken !== speechToken) return;
+      if (index >= segments.length) {
+        if (onEnd) onEnd();
+        return;
+      }
+
+      const next = () => playSegments(segments, index + 1, lang, voice, onEnd, myToken);
+      if (voice) {
+        speakWithVoice(segments[index], lang, voice, next, myToken);
+      } else {
+        playAudioFallback(segments[index], lang, next, myToken);
       }
     }
 
@@ -1413,7 +1684,8 @@
       if (lang.startsWith('en')) {
         clean = clean.replace(/\/[^\/]+\//g, '');
       }
-      clean = clean.replace(/["'“”]/g, '').trim();
+      // Giữ dấu nháy đơn để đọc đúng I'll, What's, don't
+      clean = clean.replace(/["“”]/g, '').trim();
       if (!clean) { if (onEnd) onEnd(); return; }
 
       const currentToken = ++speechToken;
@@ -1427,45 +1699,14 @@
         try { oldAudio.pause(); oldAudio.currentTime = 0; } catch (e) { }
       }
 
-      // Kiểm tra Web Speech API
-      if ('speechSynthesis' in window) {
-        try {
-          const utterance = new SpeechSynthesisUtterance(clean);
-          utterance.lang = lang;
-          utterance.rate = 0.9;
+      const segments = splitForTTS(clean);
+      const start = () => playSegments(segments, 0, lang, getVoiceFor(lang), onEnd, currentToken);
 
-          let hasFiredEnd = false;
-          utterance.onend = () => {
-            if (!hasFiredEnd) {
-              hasFiredEnd = true;
-              if (currentToken === speechToken && onEnd) onEnd();
-            }
-          };
-          utterance.onerror = (e) => {
-            if (!hasFiredEnd) {
-              hasFiredEnd = true;
-              if (currentToken === speechToken) {
-                playAudioFallback(clean, lang, onEnd, currentToken);
-              }
-            }
-          };
-
-          const voices = window.speechSynthesis.getVoices();
-          if (voices && voices.length > 0) {
-            const langPrefix = lang.split('-')[0].toLowerCase();
-            const matched = voices.find(v => v.lang.toLowerCase().startsWith(langPrefix));
-            if (matched) utterance.voice = matched;
-          }
-
-          window.speechSynthesis.speak(utterance);
-          return;
-        } catch (err) {
-          console.warn("SpeechSynthesis error, falling back:", err);
-        }
+      if (voicesSettled) {
+        start();
+      } else {
+        voiceWaiters.push(start);
       }
-
-      // Fallback sang Google TTS online
-      playAudioFallback(clean, lang, onEnd, currentToken);
     }
 
     function speakFromList(text, lang) {
@@ -1478,12 +1719,21 @@
     }
 
     // Mở khóa audio cho trình duyệt di động
+    const SILENT_AUDIO = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
+
     document.addEventListener('touchstart', function unlockAudio() {
       const audio = document.getElementById('global-audio');
-      if (audio) {
-        audio.play().then(() => audio.pause()).catch(() => { });
-      }
-      document.removeEventListener('touchstart', unlockAudio);
+      if (!audio || audio.getAttribute('src')) return;
+
+      // Phải có nguồn thật thì play() mới mở khóa được thẻ audio
+      audio.src = SILENT_AUDIO;
+      const release = () => {
+        if (audio.getAttribute('src') === SILENT_AUDIO) {
+          audio.pause();
+          audio.removeAttribute('src');
+        }
+      };
+      audio.play().then(release).catch(release);
     }, { once: true });
 
     // ───────────────────────────────────────────────────────────
@@ -1502,6 +1752,8 @@
     let fcRevealed = false;
     let isShuffled = false;
     let isReverseMode = false;  // Đảo chiều: Nghĩa tiếng Việt trước -> Từ vựng sau
+    let resetFcModeOnLoad = true; // Mở app và đổi ngôn ngữ thì về lại "Bộ hôm nay"
+    let fcExtraPhrases = [];    // Toàn bộ "Ví dụ thêm" của thẻ đang xem
 
     let apRunning = false;
     let apTimer = null;
@@ -1542,6 +1794,7 @@
 
       updateLangUI();
       resetAllFilters();
+      resetFcModeOnLoad = true;
       loadSheetData();
     }
 
@@ -1572,21 +1825,32 @@
       updateSyncStatusUI();
     }
 
-    function updateSyncStatusUI() {
-      const q = getSyncQueue();
+    // Trên điện thoại chỉ hiện icon, nội dung đầy đủ nằm ở tooltip
+    function setSyncStatus(statusClass, icon, text, tooltip = text) {
       const el = document.getElementById('sync-status');
       if (!el) return;
+      el.className = `sync-indicator ${statusClass}`;
+      el.title = tooltip;
+      el.querySelector('.sync-icon').textContent = icon;
+      el.querySelector('.sync-text').textContent = text;
+    }
+
+    function updateSyncStatusUI() {
+      const q = getSyncQueue();
       if (!APPS_SCRIPT_URL) {
-        el.className = 'sync-indicator sync-ok';
-        el.textContent = '💾 Lưu máy (chưa cấu hình Sheet URL)';
-        el.title = 'Xem file README-APPS-SCRIPT.md để kết nối ghi trực tiếp vào Google Sheet';
+        setSyncStatus('sync-ok', '💾', 'Lưu máy (chưa cấu hình Sheet URL)',
+          'Xem file README-APPS-SCRIPT.md để kết nối ghi trực tiếp vào Google Sheet');
       } else if (q.length > 0) {
-        el.className = 'sync-indicator sync-pending';
-        el.textContent = `⏳ Đang gửi ${q.length} thay đổi...`;
+        setSyncStatus('sync-pending', '⏳', `Đang gửi ${q.length} thay đổi...`);
       } else {
-        el.className = 'sync-indicator sync-ok';
-        el.textContent = '☁️ Đã đồng bộ Sheet';
+        setSyncStatus('sync-ok', '☁️', 'Đã đồng bộ Sheet');
       }
+    }
+
+    // "Cập nhật lúc…" ẩn trên điện thoại nên chép thêm vào tooltip của tên app
+    function setLastSyncLabel(text) {
+      document.getElementById('last-sync-label').textContent = text;
+      document.querySelector('header h1').title = text;
     }
 
     function queueChange(item) {
@@ -1719,7 +1983,7 @@
 
     async function loadSheetData() {
       toast('Đang tải dữ liệu từ Google Sheet...');
-      document.getElementById('last-sync-label').textContent = 'Đang kết nối dữ liệu Google Sheet...';
+      setLastSyncLabel('Đang kết nối dữ liệu Google Sheet...');
 
       try {
         const sheetId = SHEET_IDS[currentLang];
@@ -1846,7 +2110,10 @@
         // 5. Áp dụng các thay đổi còn trong hàng đợi chưa gửi (đảm bảo không bị mất)
         applyPendingSyncQueue();
 
-        // 6. Cập nhật giao diện
+        // 6. Chọn chế độ Flashcard mặc định
+        const fellBackToAll = applyDefaultFcMode();
+
+        // 7. Cập nhật giao diện
         updateStats();
         populateFilters();
         buildFlashcards();
@@ -1854,17 +2121,32 @@
         renderPhraseGrid();
 
         const langName = currentLang === 'zh' ? 'Tiếng Trung' : 'Tiếng Anh';
-        document.getElementById('last-sync-label').textContent =
-          `${langName} • Cập nhật lúc: ${new Date().toLocaleTimeString('vi-VN')} (${rawVocab.length} từ, ${rawPhrases.length} mẫu câu)`;
-        toast(`✅ Đã tải xong dữ liệu ${langName}!`);
+        setLastSyncLabel(`${langName} • Cập nhật lúc: ${new Date().toLocaleTimeString('vi-VN')} (${rawVocab.length} từ, ${rawPhrases.length} mẫu câu)`);
+        toast(fellBackToAll ? 'Chưa có bộ từ hôm nay – đang hiện tất cả từ' : `✅ Đã tải xong dữ liệu ${langName}!`);
 
         // Chạy xử lý hàng đợi nếu có
         processSyncQueue();
       } catch (err) {
         console.error("Lỗi tải Sheet:", err);
-        document.getElementById('last-sync-label').textContent = '⚠️ ' + err.message;
+        setLastSyncLabel('⚠️ ' + err.message);
         toast('❌ ' + err.message);
       }
+    }
+
+    function setFcMode(mode) {
+      document.querySelectorAll('[data-action="fc-mode"]').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.fcMode === mode);
+      });
+    }
+
+    // Trả về true nếu bộ hôm nay rỗng và phải chuyển sang "Tất cả"
+    function applyDefaultFcMode() {
+      if (!resetFcModeOnLoad) return false;
+      resetFcModeOnLoad = false;
+
+      const hasToday = rawTodayVocab.length > 0 || rawVocab.some(v => v.date === todayVN());
+      setFcMode(hasToday ? 'today' : 'all');
+      return !hasToday;
     }
 
     function applyPendingSyncQueue() {
@@ -2044,15 +2326,51 @@
       document.getElementById('reveal-btn').classList.remove('hidden');
 
       // Nếu Auto-play KHÔNG chạy và không ở chế độ đảo chiều thì tự động phát âm từ
+      // (trình duyệt chặn phát tiếng trước lần thao tác đầu tiên của người dùng)
       if (!apRunning && !isReverseMode) {
         stopAllAudio();
-        const thisToken = speechToken;
-        cardSpeakTimer = setTimeout(() => {
-          if (thisToken === speechToken && !apRunning) {
-            speak(card.word, currentLang === 'zh' ? 'zh-CN' : 'en-US');
-          }
-        }, 220);
+        const userHasInteracted = !navigator.userActivation || navigator.userActivation.hasBeenActive;
+        if (userHasInteracted) {
+          const thisToken = speechToken;
+          cardSpeakTimer = setTimeout(() => {
+            if (thisToken === speechToken && !apRunning) {
+              speak(card.word, currentLang === 'zh' ? 'zh-CN' : 'en-US');
+            }
+          }, 220);
+        }
       }
+    }
+
+    function groupLinkedPhrases(word) {
+      const linked = wordToPhrasesMap.get(word.toLowerCase()) || [];
+      return {
+        main: linked.filter(p => (p.type || '').trim() === 'Gắn với từ'),
+        extra: linked.filter(p => (p.type || '').trim() === 'Ví dụ thêm')
+      };
+    }
+
+    function renderLinkedPhrases(phrases) {
+      return phrases.map(p => `
+      <div class="fc-related-item">
+        <div class="fc-rel-phrase">${escapeHTML(p.phrase)}</div>
+        ${p.pinyin ? `<div class="fc-rel-pinyin">${escapeHTML(p.pinyin)}</div>` : ''}
+        <div class="fc-rel-meaning">${escapeHTML(p.meaning)}</div>
+        ${p.frame ? `<div class="fc-rel-frame">Khung: ${formatSentenceFrame(p.frame)}</div>` : ''}
+        <div style="margin-top:4px;">
+          <button class="audio-btn rel" data-action="speak-text" data-text="${escapeHTML(p.phrase)}" data-lang="${currentLang === 'zh' ? 'zh-CN' : 'en-US'}">🔊 Nghe câu</button>
+        </div>
+      </div>
+    `).join('');
+    }
+
+    function renderFcExtraPhrases(showAll) {
+      const visible = showAll ? fcExtraPhrases : fcExtraPhrases.slice(0, FC_EXTRA_PREVIEW);
+      const hiddenCount = fcExtraPhrases.length - visible.length;
+      document.getElementById('fc-extra-list').innerHTML = renderLinkedPhrases(visible);
+
+      const moreBtn = document.getElementById('fc-more-btn');
+      moreBtn.classList.toggle('hidden', hiddenCount === 0);
+      moreBtn.textContent = `Xem thêm ${hiddenCount} câu`;
     }
 
     function revealCard() {
@@ -2089,28 +2407,14 @@
         document.getElementById('btn-fc-speak-ex').classList.add('hidden');
       }
 
-      // Hiển thị liên kết mẫu câu dùng từ này
-      const relBox = document.getElementById('fc-related-box');
-      const relList = document.getElementById('fc-related-list');
-      const linkedPhrases = wordToPhrasesMap.get(card.word.toLowerCase()) || [];
+      // Hiển thị 2 nhóm câu liên kết với từ: Mẫu câu và Ví dụ thêm
+      const { main, extra } = groupLinkedPhrases(card.word);
+      document.getElementById('fc-related-box').classList.toggle('hidden', main.length === 0);
+      document.getElementById('fc-related-list').innerHTML = renderLinkedPhrases(main);
 
-      if (linkedPhrases.length > 0) {
-        relBox.classList.remove('hidden');
-        relList.innerHTML = linkedPhrases.map(p => `
-      <div class="fc-related-item">
-        <div class="fc-rel-phrase">${escapeHTML(p.phrase)}</div>
-        ${p.pinyin ? `<div class="fc-rel-pinyin">${escapeHTML(p.pinyin)}</div>` : ''}
-        <div class="fc-rel-meaning">${escapeHTML(p.meaning)}</div>
-        ${p.frame ? `<div class="fc-rel-frame">Khung: ${formatSentenceFrame(p.frame)}</div>` : ''}
-        <div style="margin-top:4px;">
-          <button class="audio-btn rel" data-action="speak-text" data-text="${escapeHTML(p.phrase)}" data-lang="${currentLang === 'zh' ? 'zh-CN' : 'en-US'}">🔊 Nghe câu</button>
-        </div>
-      </div>
-    `).join('');
-      } else {
-        relBox.classList.add('hidden');
-        relList.innerHTML = '';
-      }
+      fcExtraPhrases = extra;
+      document.getElementById('fc-extra-box').classList.toggle('hidden', extra.length === 0);
+      renderFcExtraPhrases(false);
 
       document.getElementById('fc-back-details').classList.remove('hidden');
       document.getElementById('level-btns').classList.remove('hidden');
@@ -2181,8 +2485,11 @@
       }
 
       container.innerHTML = list.map(v => {
-        const linkedPhrases = wordToPhrasesMap.get(v.word.toLowerCase()) || [];
-        const phraseCount = linkedPhrases.length;
+        const { main, extra } = groupLinkedPhrases(v.word);
+        const linkedLabel = [
+          main.length > 0 ? `💬 ${main.length} mẫu câu` : '',
+          extra.length > 0 ? `➕ ${extra.length} ví dụ` : ''
+        ].filter(Boolean).join(' · ');
 
         return `
       <div class="vocab-card">
@@ -2201,7 +2508,7 @@
           <div class="vc-tags">
             ${v.topic ? `<span class="tag">${escapeHTML(v.topic)}</span>` : ''}
             ${v.type ? `<span class="tag type">${escapeHTML(v.type)}</span>` : ''}
-            ${phraseCount > 0 ? `<button class="badge-linked-phrases" data-action="filter-phrase-by-word" data-word="${escapeHTML(v.word)}">💬 ${phraseCount} mẫu câu</button>` : ''}
+            ${linkedLabel ? `<button class="badge-linked-phrases" data-action="filter-phrase-by-word" data-word="${escapeHTML(v.word)}">${linkedLabel}</button>` : ''}
           </div>
 
           ${v.example ? `
@@ -2487,10 +2794,7 @@
       }
       // 10. Lọc mẫu câu theo từ vựng (từ badge trên thẻ từ vựng)
       else if (action === 'filter-phrase-by-word') {
-        const word = target.dataset.word;
-        switchTab('phrases');
-        document.getElementById('phrase-search').value = word;
-        renderPhraseGrid();
+        filterPhrasesByWord(target.dataset.word);
       }
       // 11. Đánh dấu đã dùng thực tế mẫu câu
       else if (action === 'toggle-phrase-used') {
@@ -2502,7 +2806,24 @@
       } else if (action === 'stop-ap') {
         stopAutoplay();
       }
+      // 13. Mở hết "Ví dụ thêm" trên Flashcard
+      else if (action === 'fc-more-examples') {
+        renderFcExtraPhrases(true);
+      }
     });
+
+    // Lọc theo cột "Từ vựng liên quan" để số câu khớp với badge trên thẻ từ vựng
+    function filterPhrasesByWord(word) {
+      switchTab('phrases');
+      document.getElementById('phrase-search').value = '';
+      document.getElementById('phrase-type-filter').value = '';
+      document.getElementById('phrase-situation').value = '';
+
+      const wordSelect = document.getElementById('phrase-word-filter');
+      const option = [...wordSelect.options].find(o => o.value.toLowerCase() === word.toLowerCase());
+      wordSelect.value = option ? option.value : '';
+      renderPhraseGrid();
+    }
 
     // Chuyển Tab
     function switchTab(tabName) {
