@@ -1666,6 +1666,13 @@
         white-space: nowrap;
       }
 
+      #fc-day-filter {
+        flex: 0 0 100%;
+        min-width: 0;
+        padding: 6px 8px;
+        font-size: .78rem;
+      }
+
       #fc-topic-filter {
         flex: 1;
         min-width: 0;
@@ -1929,10 +1936,13 @@
       <div class="controls">
         <div class="mode-btns">
           <button class="mode-btn" data-action="fc-mode" data-fc-mode="all">Tất cả</button>
-          <button class="mode-btn active" data-action="fc-mode" data-fc-mode="today">Bộ hôm nay</button>
+          <button class="mode-btn active" id="fc-mode-day" data-action="fc-mode" data-fc-mode="today">Bộ hôm nay</button>
           <button class="mode-btn" data-action="fc-mode" data-fc-mode="review">Cần ôn<span class="lbl-long"> (Lv &lt;
               4)</span></button>
         </div>
+        <select id="fc-day-filter" class="hidden" aria-label="Chọn ngày học">
+          <option value="">Hôm nay</option>
+        </select>
         <select id="fc-topic-filter">
           <option value="">Tất cả chủ đề</option>
         </select>
@@ -2061,7 +2071,7 @@
       <div class="autoplay-bar">
         <label style="font-size:.88rem;font-weight:600;">🎵 Phát tự động</label>
         <select id="ap-source">
-          <option value="today">Bộ từ hôm nay</option>
+          <option value="today" id="ap-source-day">Bộ từ hôm nay</option>
           <option value="vocab">Từ vựng (Tất cả)</option>
           <option value="phrases">Mẫu câu</option>
         </select>
@@ -2098,6 +2108,7 @@
 
     const TOKEN_STORAGE_KEY = "henry_session_token";
     const SYNC_RETRY_MIN_MS = 2000;
+    const DAY_CACHE_MS = 24 * 3600 * 1000;
     const SYNC_BATCH_SIZE = 20;       // Khớp MAX_SYNC_BATCH trong apps-script.gs
     const SYNC_RETRY_MAX_MS = 60000;
 
@@ -2371,6 +2382,11 @@
     let rawVocab = [];          // Danh sách từ vựng
     let rawPhrases = [];        // Danh sách mẫu câu
     let rawTodayVocab = [];     // Bộ từ hôm nay (đã ghép với Từ vựng)
+    let availableDays = [];     // [{ date, count }] các ngày có bộ từ, mới nhất trước
+    let selectedDay = '';       // '' = hôm nay, còn lại là ngày cũ đang học
+    let rawDayRows = [];        // Dòng gốc của ngày cũ, ghép lại mỗi khi dữ liệu thay đổi
+    let rawDayVocab = [];       // Bộ từ của ngày cũ (đã ghép với Từ vựng)
+    let daySeq = 0;             // Bỏ qua phản hồi cũ khi đổi ngày liên tiếp
     let wordToPhrasesMap = new Map(); // normalized word -> [phraseObj, ...]
     let vocabWordMap = new Map();     // normalized word -> vocabObj
 
@@ -2658,6 +2674,8 @@
       rawVocab = [];
       rawPhrases = [];
       rawTodayVocab = [];
+      availableDays = [];
+      clearSelectedDay();
       vocabWordMap.clear();
       wordToPhrasesMap.clear();
       resetAllFilters();
@@ -3487,9 +3505,19 @@
       rawPhrases = parsedPhrases;
 
       // 4. Xử lý "Bộ từ hôm nay": server đã lọc theo ngày VN, ở đây ghép với Từ vựng
-      const todayStr = todayVN();
+      rawTodayVocab = toDayCards(data.today, todayVN());
+      rawDayVocab = selectedDay ? toDayCards(rawDayRows, selectedDay) : [];
+      availableDays = data.days || [];
+      renderDayFilter();
 
-      rawTodayVocab = data.today.map(tr => {
+      // 5. Áp dụng các thay đổi còn trong hàng đợi chưa gửi (đảm bảo không bị mất)
+      applyPendingSyncQueue();
+    }
+
+    function toDayCards(rows, date) {
+      const savedLocalLevels = getSavedLevels();
+
+      return rows.map(tr => {
         const w = (tr["Từ / cụm từ"] || '').trim();
         const matchedVocab = vocabWordMap.get(w.toLowerCase());
         const status = (tr["Mới / Ôn"] || 'Mới').trim();
@@ -3502,38 +3530,131 @@
             todayExampleVi: tr["Dịch mẫu câu"] || matchedVocab.example_vi,
             todayPinyin: tr["Pinyin mẫu câu"] || matchedVocab.example_pinyin
           };
-        } else {
-          // Dòng trong Bộ hôm nay không khớp tab Từ vựng -> vẫn hiển thị đầy đủ
-          return {
-            word: w,
-            meaning: tr["Nghĩa"] || '',
-            phonetic: tr["Phiên âm"] || '',
-            example: tr["Mẫu câu đi kèm"] || '',
-            example_vi: tr["Dịch mẫu câu"] || '',
-            example_pinyin: tr["Pinyin mẫu câu"] || '',
-            type: '',
-            topic: 'Bộ từ hôm nay',
-            date: todayStr,
-            level: savedLocalLevels[w] || 1,
-            status: status
-          };
         }
-      });
 
-      // 5. Áp dụng các thay đổi còn trong hàng đợi chưa gửi (đảm bảo không bị mất)
-      applyPendingSyncQueue();
+        // Dòng trong Bộ hôm nay không khớp tab Từ vựng -> vẫn hiển thị đầy đủ
+        return {
+          word: w,
+          meaning: tr["Nghĩa"] || '',
+          phonetic: tr["Phiên âm"] || '',
+          example: tr["Mẫu câu đi kèm"] || '',
+          example_vi: tr["Dịch mẫu câu"] || '',
+          example_pinyin: tr["Pinyin mẫu câu"] || '',
+          type: '',
+          topic: 'Bộ từ hôm nay',
+          date: date,
+          level: savedLocalLevels[w] || 1,
+          status: status
+        };
+      });
     }
 
     function setFcMode(mode) {
       document.querySelectorAll('[data-action="fc-mode"]').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.fcMode === mode);
       });
+      updateDayControls();
+    }
+
+    // ───────────────────────────────────────────────
+    // CHỌN NGÀY HỌC
+    // ───────────────────────────────────────────────
+    function formatDay(date, withYear = true) {
+      const [year, month, day] = date.split('-');
+      return withYear ? `${day}/${month}/${year}` : `${day}/${month}`;
+    }
+
+    function dayCacheKey(lang, date) {
+      return `henry_day_${lang}_${date}`;
+    }
+
+    function clearSelectedDay() {
+      daySeq++;
+      selectedDay = '';
+      rawDayRows = [];
+      rawDayVocab = [];
+      updateDayControls();
+    }
+
+    function dayCards() {
+      if (selectedDay) return rawDayVocab;
+      return rawTodayVocab.length > 0 ? rawTodayVocab : rawVocab.filter(v => v.date === todayVN());
+    }
+
+    function renderDayFilter() {
+      const today = todayVN();
+      const select = document.getElementById('fc-day-filter');
+      const todayInfo = availableDays.find(day => day.date === today);
+
+      select.innerHTML = '';
+      select.add(new Option(`Hôm nay – ${formatDay(today)}${todayInfo ? ` (${todayInfo.count} từ)` : ''}`, ''));
+      availableDays.filter(day => day.date !== today).forEach(day => {
+        select.add(new Option(`${formatDay(day.date)} (${day.count} từ)`, day.date));
+      });
+      select.value = selectedDay;
+      updateDayControls();
+    }
+
+    // Chỉ hiện ô chọn ngày ở chế độ học theo bộ và khi có ngày cũ để chọn
+    function updateDayControls() {
+      const mode = document.querySelector('[data-action="fc-mode"].active')?.dataset.fcMode;
+      const hasOtherDays = availableDays.some(day => day.date !== todayVN());
+      document.getElementById('fc-day-filter').classList.toggle('hidden', mode !== 'today' || !hasOtherDays);
+      document.getElementById('fc-mode-day').textContent = selectedDay ? `Bộ ${formatDay(selectedDay, false)}` : 'Bộ hôm nay';
+      document.getElementById('ap-source-day').textContent = selectedDay ? `Bộ từ ${formatDay(selectedDay)}` : 'Bộ từ hôm nay';
+    }
+
+    function showDay(date, rows) {
+      selectedDay = date;
+      rawDayRows = rows;
+      rawDayVocab = date ? toDayCards(rows, date) : [];
+      document.getElementById('fc-day-filter').value = date;
+      setFcMode('today');
+      buildFlashcards();
+    }
+
+    async function selectDay(date) {
+      const seq = ++daySeq;
+      const lang = currentLang;
+      if (!date) {
+        showDay('', []);
+        return;
+      }
+
+      let saved = null;
+      try {
+        saved = JSON.parse(localStorage.getItem(dayCacheKey(lang, date)) || 'null');
+      } catch (e) { }
+      if (saved && Date.now() - saved.savedAt < DAY_CACHE_MS) {
+        showDay(date, saved.rows);
+        return;
+      }
+
+      toast(`Đang tải bộ từ ngày ${formatDay(date)}...`);
+      try {
+        const { rows } = await postApi({ action: 'dayData', lang, date });
+        try {
+          localStorage.setItem(dayCacheKey(lang, date), JSON.stringify({ savedAt: Date.now(), rows }));
+        } catch (e) { }
+        if (seq === daySeq) showDay(date, rows);
+      } catch (err) {
+        if (seq !== daySeq) return;
+        console.warn('Lỗi tải bộ từ theo ngày:', err);
+        if (saved) {
+          showDay(date, saved.rows);
+        } else {
+          document.getElementById('fc-day-filter').value = selectedDay;
+          toast('❌ Không tải được bộ từ của ngày này');
+        }
+      }
     }
 
     // Trả về true nếu bộ hôm nay rỗng và phải chuyển sang "Tất cả"
     function applyDefaultFcMode() {
       if (!resetFcModeOnLoad) return false;
       resetFcModeOnLoad = false;
+      clearSelectedDay();
+      document.getElementById('fc-day-filter').value = '';
 
       const hasToday = rawTodayVocab.length > 0 || rawVocab.some(v => v.date === todayVN());
       setFcMode(hasToday ? 'today' : 'all');
@@ -3543,7 +3664,7 @@
     // Thẻ trong Bộ hôm nay là bản sao nên phải cập nhật cả 2 nơi
     function updateCardLevel(word, level, lastReview) {
       const key = word.toLowerCase();
-      const cards = rawTodayVocab.filter(card => card.word.toLowerCase() === key);
+      const cards = [...rawTodayVocab, ...rawDayVocab].filter(card => card.word.toLowerCase() === key);
       const vocabItem = vocabWordMap.get(key);
       if (vocabItem) cards.push(vocabItem);
 
@@ -3632,7 +3753,7 @@
 
       let list = [];
       if (mode === 'today') {
-        list = rawTodayVocab.length > 0 ? [...rawTodayVocab] : rawVocab.filter(v => v.date === todayVN());
+        list = [...dayCards()];
       } else if (mode === 'review') {
         list = rawVocab.filter(v => v.level < 4);
       } else {
@@ -4043,7 +4164,7 @@
 
       let list = [];
       if (src === 'today') {
-        list = rawTodayVocab.length > 0 ? rawTodayVocab : rawVocab.filter(v => v.date === todayVN());
+        list = dayCards();
       } else if (src === 'phrases') {
         list = rawPhrases;
       } else {
@@ -4140,8 +4261,7 @@
       }
       // 3. Chuyển chế độ Flashcard (Tất cả / Hôm nay / Cần ôn)
       else if (action === 'fc-mode') {
-        document.querySelectorAll('[data-action="fc-mode"]').forEach(b => b.classList.remove('active'));
-        target.classList.add('active');
+        setFcMode(target.dataset.fcMode);
         buildFlashcards();
       }
       // 4. Xáo trộn thẻ
@@ -4306,6 +4426,7 @@
     document.getElementById('phrase-word-filter').addEventListener('change', renderPhraseGrid);
 
     document.getElementById('fc-topic-filter').addEventListener('change', buildFlashcards);
+    document.getElementById('fc-day-filter').addEventListener('change', event => selectDay(event.target.value));
 
     // Phím tắt bàn phím
     document.addEventListener('keydown', e => {
