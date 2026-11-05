@@ -1936,12 +1936,12 @@
       <div class="controls">
         <div class="mode-btns">
           <button class="mode-btn" data-action="fc-mode" data-fc-mode="all">Tất cả</button>
-          <button class="mode-btn active" id="fc-mode-day" data-action="fc-mode" data-fc-mode="today">Bộ hôm nay</button>
+          <button class="mode-btn active" data-action="fc-mode" data-fc-mode="today">Bộ hôm nay</button>
           <button class="mode-btn" data-action="fc-mode" data-fc-mode="review">Cần ôn<span class="lbl-long"> (Lv &lt;
               4)</span></button>
         </div>
-        <select id="fc-day-filter" class="hidden" aria-label="Chọn ngày học">
-          <option value="">Hôm nay</option>
+        <select id="fc-day-filter" class="hidden" aria-label="Chọn ngày để học lại">
+          <option value="">📅 Chọn ngày để học lại</option>
         </select>
         <select id="fc-topic-filter">
           <option value="">Tất cả chủ đề</option>
@@ -2071,7 +2071,8 @@
       <div class="autoplay-bar">
         <label style="font-size:.88rem;font-weight:600;">🎵 Phát tự động</label>
         <select id="ap-source">
-          <option value="today" id="ap-source-day">Bộ từ hôm nay</option>
+          <option value="today">Bộ từ hôm nay</option>
+          <option value="day" id="ap-source-day" hidden disabled></option>
           <option value="vocab">Từ vựng (Tất cả)</option>
           <option value="phrases">Mẫu câu</option>
         </select>
@@ -3553,11 +3554,10 @@
       document.querySelectorAll('[data-action="fc-mode"]').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.fcMode === mode);
       });
-      updateDayControls();
     }
 
     // ───────────────────────────────────────────────
-    // CHỌN NGÀY HỌC
+    // CHỌN NGÀY HỌC (độc lập với các nút Tất cả / Bộ hôm nay / Cần ôn)
     // ───────────────────────────────────────────────
     function formatDay(date, withYear = true) {
       const [year, month, day] = date.split('-');
@@ -3573,21 +3573,20 @@
       selectedDay = '';
       rawDayRows = [];
       rawDayVocab = [];
+      document.getElementById('fc-day-filter').value = '';
       updateDayControls();
     }
 
-    function dayCards() {
-      if (selectedDay) return rawDayVocab;
+    function todayCards() {
       return rawTodayVocab.length > 0 ? rawTodayVocab : rawVocab.filter(v => v.date === todayVN());
     }
 
     function renderDayFilter() {
       const today = todayVN();
       const select = document.getElementById('fc-day-filter');
-      const todayInfo = availableDays.find(day => day.date === today);
 
       select.innerHTML = '';
-      select.add(new Option(`Hôm nay – ${formatDay(today)}${todayInfo ? ` (${todayInfo.count} từ)` : ''}`, ''));
+      select.add(new Option('📅 Chọn ngày để học lại', ''));
       availableDays.filter(day => day.date !== today).forEach(day => {
         select.add(new Option(`${formatDay(day.date)} (${day.count} từ)`, day.date));
       });
@@ -3595,21 +3594,26 @@
       updateDayControls();
     }
 
-    // Chỉ hiện ô chọn ngày ở chế độ học theo bộ và khi có ngày cũ để chọn
     function updateDayControls() {
-      const mode = document.querySelector('[data-action="fc-mode"].active')?.dataset.fcMode;
-      const hasOtherDays = availableDays.some(day => day.date !== todayVN());
-      document.getElementById('fc-day-filter').classList.toggle('hidden', mode !== 'today' || !hasOtherDays);
-      document.getElementById('fc-mode-day').textContent = selectedDay ? `Bộ ${formatDay(selectedDay, false)}` : 'Bộ hôm nay';
-      document.getElementById('ap-source-day').textContent = selectedDay ? `Bộ từ ${formatDay(selectedDay)}` : 'Bộ từ hôm nay';
+      const hasPastDays = availableDays.some(day => day.date !== todayVN());
+      document.getElementById('fc-day-filter').classList.toggle('hidden', !hasPastDays);
+
+      // Tự đọc: chỉ có thêm lựa chọn này khi đang chọn một ngày
+      const apOption = document.getElementById('ap-source-day');
+      const apSource = document.getElementById('ap-source');
+      apOption.hidden = !selectedDay;
+      apOption.disabled = !selectedDay;
+      apOption.textContent = selectedDay ? `Bộ từ ${formatDay(selectedDay)}` : '';
+      if (!selectedDay && apSource.value === 'day') apSource.value = 'today';
     }
 
     function showDay(date, rows) {
       selectedDay = date;
       rawDayRows = rows;
-      rawDayVocab = date ? toDayCards(rows, date) : [];
+      rawDayVocab = toDayCards(rows, date);
       document.getElementById('fc-day-filter').value = date;
-      setFcMode('today');
+      updateDayControls();
+      setFcMode('day');   // Không nút nào sáng vì bộ này đến từ ô chọn ngày
       buildFlashcards();
     }
 
@@ -3617,7 +3621,9 @@
       const seq = ++daySeq;
       const lang = currentLang;
       if (!date) {
-        showDay('', []);
+        clearSelectedDay();
+        setFcMode('today');
+        buildFlashcards();
         return;
       }
 
@@ -3654,7 +3660,6 @@
       if (!resetFcModeOnLoad) return false;
       resetFcModeOnLoad = false;
       clearSelectedDay();
-      document.getElementById('fc-day-filter').value = '';
 
       const hasToday = rawTodayVocab.length > 0 || rawVocab.some(v => v.date === todayVN());
       setFcMode(hasToday ? 'today' : 'all');
@@ -3748,12 +3753,14 @@
     // FLASHCARD
     // ───────────────────────────────────────────────────────────
     function listFlashcards() {
-      const mode = document.querySelector('[data-action="fc-mode"].active')?.dataset.fcMode || 'all';
+      const mode = document.querySelector('[data-action="fc-mode"].active')?.dataset.fcMode;
       const topic = document.getElementById('fc-topic-filter').value;
 
       let list = [];
-      if (mode === 'today') {
-        list = [...dayCards()];
+      if (selectedDay) {
+        list = [...rawDayVocab];
+      } else if (mode === 'today') {
+        list = [...todayCards()];
       } else if (mode === 'review') {
         list = rawVocab.filter(v => v.level < 4);
       } else {
@@ -4164,7 +4171,9 @@
 
       let list = [];
       if (src === 'today') {
-        list = dayCards();
+        list = todayCards();
+      } else if (src === 'day') {
+        list = rawDayVocab;
       } else if (src === 'phrases') {
         list = rawPhrases;
       } else {
@@ -4261,6 +4270,7 @@
       }
       // 3. Chuyển chế độ Flashcard (Tất cả / Hôm nay / Cần ôn)
       else if (action === 'fc-mode') {
+        clearSelectedDay();
         setFcMode(target.dataset.fcMode);
         buildFlashcards();
       }
