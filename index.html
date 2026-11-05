@@ -2057,6 +2057,7 @@
 
     const TOKEN_STORAGE_KEY = "henry_session_token";
     const SYNC_RETRY_MIN_MS = 2000;
+    const SYNC_BATCH_SIZE = 20;       // Khớp MAX_SYNC_BATCH trong apps-script.gs
     const SYNC_RETRY_MAX_MS = 60000;
 
     const EMAIL_STATUS_VIEW = {
@@ -2346,9 +2347,14 @@
     let apCurIdx = 0;
 
     // URL ?lang= được ưu tiên, sau đó theo "Ngôn ngữ học" trong hồ sơ
-    function initLang(profile) {
+    function requestedLang() {
       const urlParam = new URLSearchParams(window.location.search).get('lang');
-      if (urlParam === 'zh' || urlParam === 'en') {
+      return urlParam === 'zh' || urlParam === 'en' ? urlParam : undefined;
+    }
+
+    function initLang(profile) {
+      const urlParam = requestedLang();
+      if (urlParam) {
         currentLang = urlParam;
       } else {
         currentLang = profile.languages === 'Trung' ? 'zh' : 'en';
@@ -2396,6 +2402,7 @@
     let userProfile = null;
     let dataLoadedFor = null;   // Email của dữ liệu đang hiển thị
     let needsRelogin = false;
+    let sessionRemembered = false;
 
     function isConfigured() {
       return Boolean(APPS_SCRIPT_URL);
@@ -2425,12 +2432,45 @@
       removeStoredToken();
       sessionToken = token;
       currentEmail = claims.e;
+      sessionRemembered = Boolean(claims.r);
       try {
         (claims.r ? localStorage : sessionStorage).setItem(TOKEN_STORAGE_KEY, token);
       } catch (e) { }
     }
 
+    // Lưu cùng nơi với token: không "Ghi nhớ" thì đóng tab là mất, không để lại trên máy dùng chung
+    function profileCacheKey() {
+      return `henry_cache_profile_${currentEmail}`;
+    }
+
+    function dataCacheKey(lang) {
+      return `henry_cache_data_${lang}_${currentEmail}`;
+    }
+
+    function readCache(key) {
+      try {
+        return JSON.parse((sessionRemembered ? localStorage : sessionStorage).getItem(key) || 'null');
+      } catch (e) { return null; }
+    }
+
+    function writeCache(key, value) {
+      try {
+        (sessionRemembered ? localStorage : sessionStorage).setItem(key, JSON.stringify(value));
+      } catch (e) { }
+    }
+
+    function clearUserCache() {
+      const keys = [profileCacheKey(), dataCacheKey('en'), dataCacheKey('zh')];
+      try {
+        keys.forEach(key => {
+          localStorage.removeItem(key);
+          sessionStorage.removeItem(key);
+        });
+      } catch (e) { }
+    }
+
     function clearSession() {
+      if (currentEmail) clearUserCache();
       removeStoredToken();
       currentEmail = null;
       userProfile = null;
@@ -2614,13 +2654,32 @@
       }
     }
 
+    function applyProfile(profile) {
+      userProfile = profile;
+      if (profile.mustChangePassword) {
+        clearUserCache();
+      } else {
+        writeCache(profileCacheKey(), profile);
+        renderUserChip();
+      }
+    }
+
+    // Đã có hồ sơ lưu trên máy thì vào app ngay, server kiểm tra lại ở nền trong loadSheetData.
+    // Đăng nhập lại khi app đang mở thì không tải lại dữ liệu, nên phải hỏi server trước.
     async function enterApp() {
+      const cachedProfile = readCache(profileCacheKey());
+      if (cachedProfile && dataLoadedFor !== currentEmail) {
+        userProfile = cachedProfile;
+        startLearning();
+        return;
+      }
+
       setAuthMessage('Đang đăng nhập...');
       try {
-        const me = await api('me');
-        userProfile = me;
-        if (me.mustChangePassword) showPasswordForm(true);
-        else startLearning();
+        const result = await api('bootstrap', { lang: requestedLang() });
+        applyProfile(result.profile);
+        if (result.profile.mustChangePassword) showPasswordForm(true);
+        else startLearning(result);
       } catch (err) {
         console.warn('Lỗi đăng nhập:', err);
         if (err.code === 'AUTH') {
@@ -2634,7 +2693,7 @@
       }
     }
 
-    function startLearning() {
+    function startLearning(preloaded) {
       needsRelogin = false;
       renderUserChip();
       setScreen(null);
@@ -2649,7 +2708,14 @@
       dataLoadedFor = currentEmail;
       resetFcModeOnLoad = true;
       initLang(userProfile);
-      loadSheetData();
+
+      if (preloaded && preloaded.lang === currentLang) {
+        writeCache(dataCacheKey(currentLang), preloaded.data);
+        showLoadedData(preloaded.data, currentLang);
+        announceLoaded(currentLang);
+      } else {
+        loadSheetData();
+      }
     }
 
     function renderUserChip() {
@@ -2964,6 +3030,7 @@
     let isSyncing = false;
     let syncRetryTimer = null;
     let syncRetryMs = 0;
+    const recentSaves = [];     // Mục đã ghi xong trong phiên này, xem loadSheetData
 
     function syncQueueKey() {
       return `henry_sync_queue_${currentEmail}`;
@@ -2985,8 +3052,31 @@
       updateSyncStatusUI();
     }
 
-    function removeQueueItem(id) {
-      saveSyncQueue(getSyncQueue().filter(item => item.id !== id));
+    function removeQueueItems(ids) {
+      saveSyncQueue(getSyncQueue().filter(item => !ids.includes(item.id)));
+    }
+
+    function patchProgressRows(data, item) {
+      let row = data.progress.find(r => r["Loại mục"] === item.itemType
+        && (r["Nội dung"] || '').trim() === item.content);
+      if (!row) {
+        row = { "Loại mục": item.itemType, "Nội dung": item.content };
+        data.progress.push(row);
+      }
+      if (item.level !== undefined) {
+        row["Mức độ nhớ (1-5)"] = String(item.level);
+        row["Lần ôn gần nhất"] = todayVN();
+      }
+      if (item.used !== undefined) row["Đã dùng thực tế? (Có/Chưa)"] = item.used;
+    }
+
+    function rememberSavedItems(lang, items) {
+      recentSaves.push(...items);
+      const key = dataCacheKey(lang);
+      const data = readCache(key);
+      if (!data) return;
+      items.forEach(item => patchProgressRows(data, item));
+      writeCache(key, data);
     }
 
     // Trên điện thoại chỉ hiện icon, nội dung đầy đủ nằm ở tooltip
@@ -3048,26 +3138,33 @@
       clearTimeout(syncRetryTimer);
       try {
         while (email === currentEmail && sessionToken) {
-          const item = getSyncQueue()[0];
-          if (!item) break;
+          const queue = getSyncQueue();
+          if (!queue.length) break;
+
+          // Các mục chấm trong lúc chờ lượt gửi trước sẽ đi chung một lượt
+          const lang = queue[0].lang;
+          const batch = queue.filter(item => item.lang === lang).slice(0, SYNC_BATCH_SIZE);
+          const ids = batch.map(item => item.id);
 
           try {
-            await api('setProgress', {
-              lang: item.lang,
-              itemType: item.itemType,
-              content: item.content,
-              level: item.level,
-              used: item.used
+            const { rejected } = await api('setProgressBatch', {
+              lang,
+              items: batch.map(({ id, itemType, content, level, used }) => ({ id, itemType, content, level, used }))
             });
-            removeQueueItem(item.id);
+            if (email !== currentEmail) break;
+
+            const rejectedIds = rejected.map(item => item.id);
+            rejected.forEach(item => console.warn('Bỏ thay đổi không hợp lệ:', item));
+            rememberSavedItems(lang, batch.filter(item => !rejectedIds.includes(item.id)));
+            removeQueueItems(ids);
             syncRetryMs = 0;
           } catch (err) {
             if (handleSessionError(err)) break;
 
             // Server từ chối hẳn: thử lại cũng vô ích và sẽ làm kẹt các mục phía sau
             if (err.code === 'VALIDATION') {
-              console.warn('Bỏ thay đổi không hợp lệ:', item, err.message);
-              removeQueueItem(item.id);
+              console.warn('Bỏ thay đổi không hợp lệ:', batch, err.message);
+              removeQueueItems(ids);
               continue;
             }
 
@@ -3107,164 +3204,239 @@
     // TẢI DỮ LIỆU QUA APPS SCRIPT
     // ───────────────────────────────────────────────────────────
     let loadSeq = 0; // Bỏ qua phản hồi cũ khi đổi ngôn ngữ liên tiếp
+    let fellBackToAllCards = false;
 
     function progressKey(itemType, content) {
       return `${itemType}\n${content}`;
     }
 
-    async function loadSheetData() {
+    function langLabel(lang) {
+      return lang === 'zh' ? 'Tiếng Trung' : 'Tiếng Anh';
+    }
+
+    // Có dữ liệu đã lưu thì hiện ngay rồi cập nhật ở nền. fresh = bỏ qua mọi bộ nhớ đệm (nút Tải lại).
+    async function loadSheetData({ fresh = false } = {}) {
       const seq = ++loadSeq;
       const lang = currentLang;
+      const savesBefore = recentSaves.length;
+      const cacheKey = dataCacheKey(lang);
+      const cached = fresh ? null : readCache(cacheKey);
 
-      toast('Đang tải dữ liệu từ Google Sheet...');
-      setLastSyncLabel('Đang kết nối dữ liệu Google Sheet...');
+      if (cached) {
+        showLoadedData(cached, lang);
+        setLastSyncLabel(`${langLabel(lang)} • Dữ liệu đã lưu (${rawVocab.length} từ, ${rawPhrases.length} mẫu câu)`);
+      } else {
+        toast('Đang tải dữ liệu từ Google Sheet...');
+        setLastSyncLabel('Đang kết nối dữ liệu Google Sheet...');
+      }
 
       try {
-        // 1. Lấy Từ vựng, Mẫu câu, Bộ từ hôm nay và tiến độ của riêng người đang đăng nhập
-        const data = await api('getData', { lang });
+        const result = await api('bootstrap', { lang, fresh });
         if (seq !== loadSeq) return;
 
-        const progressMap = new Map();
-        data.progress.forEach(row => {
-          progressMap.set(progressKey(row["Loại mục"], (row["Nội dung"] || '').trim()), row);
-        });
+        applyProfile(result.profile);
+        if (result.profile.mustChangePassword) {
+          showPasswordForm(true);
+          return;
+        }
 
-        // 2. Xử lý Tab Từ vựng
-        const savedLocalLevels = getSavedLevels();
-        const parsedVocab = [];
-        vocabWordMap.clear();
+        // Phản hồi có thể đã đọc sheet trước khi các lần chấm này được ghi
+        const data = result.data;
+        recentSaves.slice(savesBefore)
+          .filter(item => item.lang === lang)
+          .forEach(item => patchProgressRows(data, item));
 
-        data.vocab.forEach(row => {
-          const word = (row["Từ / cụm từ"] || '').trim();
-          if (!word) return;
+        const changed = JSON.stringify(readCache(cacheKey)) !== JSON.stringify(data);
+        writeCache(cacheKey, data);
 
-          const progress = progressMap.get(progressKey(ITEM_VOCAB, word));
-          const sheetLv = progress ? parseInt(progress["Mức độ nhớ (1-5)"], 10) : NaN;
-          const level = !isNaN(sheetLv) && sheetLv >= 1 && sheetLv <= 5 ? sheetLv : (savedLocalLevels[word] || 1);
-
-          const item = {
-            word: word,
-            meaning: row["Nghĩa"] || '',
-            type: row["Loại"] || '',
-            topic: row["Chủ đề"] || '',
-            example: row["Câu ví dụ"] || '',
-            example_vi: row["Dịch câu ví dụ"] || '',
-            example_pinyin: row["Pinyin câu ví dụ"] || '',
-            phonetic: row["Phiên âm"] || '',
-            date: row["Ngày học"] || '',
-            level: level,
-            last_review: progress ? (progress["Lần ôn gần nhất"] || '') : ''
-          };
-          parsedVocab.push(item);
-          vocabWordMap.set(word.toLowerCase(), item);
-        });
-        rawVocab = parsedVocab;
-
-        // 3. Xử lý Tab Mẫu câu & Tạo liên kết Từ vựng ↔ Mẫu câu
-        wordToPhrasesMap.clear();
-        const parsedPhrases = [];
-
-        data.phrases.forEach(row => {
-          const phraseText = (row["Mẫu câu"] || '').trim();
-          if (!phraseText) return;
-
-          const progress = progressMap.get(progressKey(ITEM_PHRASE, phraseText));
-          const pItem = {
-            phrase: phraseText,
-            meaning: row["Nghĩa"] || '',
-            situation: row["Tình huống dùng"] || '',
-            used: (progress && progress["Đã dùng thực tế? (Có/Chưa)"] || 'Chưa').trim(),
-            date: row["Ngày học"] || '',
-            pinyin: row["Pinyin"] || '',
-            relatedWordsRaw: row["Từ vựng liên quan"] || '',
-            frame: row["Khung câu"] || '',
-            type: row["Loại"] || ''
-          };
-
-          // Phân tách các từ liên quan
-          const relatedList = [];
-          if (pItem.relatedWordsRaw && pItem.type !== "Câu giao tiếp chung") {
-            const words = pItem.relatedWordsRaw.split(',').map(w => w.trim()).filter(Boolean);
-            words.forEach(w => {
-              const norm = w.toLowerCase();
-              const exists = vocabWordMap.has(norm);
-              if (!exists) {
-                console.warn(`[Lỗi liên kết dữ liệu] Mẫu câu "${phraseText}" chứa từ vựng liên quan "${w}" nhưng không tìm thấy trong tab Từ vựng.`);
-              }
-              relatedList.push({ word: w, matched: exists });
-
-              // Lưu map từ -> danh sách mẫu câu
-              if (!wordToPhrasesMap.has(norm)) {
-                wordToPhrasesMap.set(norm, []);
-              }
-              wordToPhrasesMap.get(norm).push(pItem);
-            });
-          }
-          pItem.relatedWords = relatedList;
-          parsedPhrases.push(pItem);
-        });
-        rawPhrases = parsedPhrases;
-
-        // 4. Xử lý "Bộ từ hôm nay": server đã lọc theo ngày VN, ở đây ghép với Từ vựng
-        const todayStr = todayVN();
-
-        rawTodayVocab = data.today.map(tr => {
-          const w = (tr["Từ / cụm từ"] || '').trim();
-          const matchedVocab = vocabWordMap.get(w.toLowerCase());
-          const status = (tr["Mới / Ôn"] || 'Mới').trim();
-
-          if (matchedVocab) {
-            return {
-              ...matchedVocab,
-              status: status,
-              todayExample: tr["Mẫu câu đi kèm"] || matchedVocab.example,
-              todayExampleVi: tr["Dịch mẫu câu"] || matchedVocab.example_vi,
-              todayPinyin: tr["Pinyin mẫu câu"] || matchedVocab.example_pinyin
-            };
-          } else {
-            // Dòng trong Bộ hôm nay không khớp tab Từ vựng -> vẫn hiển thị đầy đủ
-            return {
-              word: w,
-              meaning: tr["Nghĩa"] || '',
-              phonetic: tr["Phiên âm"] || '',
-              example: tr["Mẫu câu đi kèm"] || '',
-              example_vi: tr["Dịch mẫu câu"] || '',
-              example_pinyin: tr["Pinyin mẫu câu"] || '',
-              type: '',
-              topic: 'Bộ từ hôm nay',
-              date: todayStr,
-              level: savedLocalLevels[w] || 1,
-              status: status
-            };
-          }
-        });
-
-        // 5. Áp dụng các thay đổi còn trong hàng đợi chưa gửi (đảm bảo không bị mất)
-        applyPendingSyncQueue();
-
-        // 6. Chọn chế độ Flashcard mặc định
-        const fellBackToAll = applyDefaultFcMode();
-
-        // 7. Cập nhật giao diện
-        updateStats();
-        populateFilters();
-        buildFlashcards();
-        renderVocabGrid();
-        renderPhraseGrid();
-
-        const langName = lang === 'zh' ? 'Tiếng Trung' : 'Tiếng Anh';
-        setLastSyncLabel(`${langName} • Cập nhật lúc: ${new Date().toLocaleTimeString('vi-VN')} (${rawVocab.length} từ, ${rawPhrases.length} mẫu câu)`);
-        toast(fellBackToAll ? 'Chưa có bộ từ hôm nay – đang hiện tất cả từ' : `✅ Đã tải xong dữ liệu ${langName}!`);
-
-        // Chạy xử lý hàng đợi nếu có
-        processSyncQueue();
+        if (!cached) {
+          showLoadedData(data, lang);
+          announceLoaded(lang);
+        } else if (changed && !apRunning) {
+          refreshKeepingPlace(data);
+        }
+        setLastSyncLabel(loadedLabel(lang));
       } catch (err) {
         if (seq !== loadSeq || handleSessionError(err)) return;
 
         console.warn("Lỗi tải dữ liệu:", err);
-        setLastSyncLabel('⚠️ ' + err.message);
-        toast('❌ ' + err.message);
+        if (cached) {
+          setLastSyncLabel(`${langLabel(lang)} • Dữ liệu đã lưu, chưa kết nối được máy chủ`);
+        } else {
+          setLastSyncLabel('⚠️ ' + err.message);
+          toast('❌ ' + err.message);
+        }
       }
+    }
+
+    function loadedLabel(lang) {
+      return `${langLabel(lang)} • Cập nhật lúc: ${new Date().toLocaleTimeString('vi-VN')} (${rawVocab.length} từ, ${rawPhrases.length} mẫu câu)`;
+    }
+
+    function announceLoaded(lang) {
+      setLastSyncLabel(loadedLabel(lang));
+      if (!fellBackToAllCards) toast(`✅ Đã tải xong dữ liệu ${langLabel(lang)}!`);
+    }
+
+    function showLoadedData(data, lang) {
+      applySheetData(data);
+      fellBackToAllCards = applyDefaultFcMode();
+
+      updateStats();
+      populateFilters();
+      buildFlashcards();
+      renderVocabGrid();
+      renderPhraseGrid();
+
+      if (fellBackToAllCards) toast('Chưa có bộ từ hôm nay – đang hiện tất cả từ');
+      processSyncQueue();
+    }
+
+    // Cập nhật ở nền không được làm mất thẻ đang học, bộ lọc đang chọn hay phát âm lại
+    function refreshKeepingPlace(data) {
+      const filterIds = ['fc-topic-filter', 'vocab-topic', 'phrase-situation', 'phrase-word-filter'];
+      const filters = filterIds.map(id => document.getElementById(id).value);
+      const currentWord = currentFcList[fcIndex]?.word;
+      const wasShown = new Set(currentFcList.map(card => card.word));
+
+      applySheetData(data);
+      updateStats();
+      populateFilters();
+      filterIds.forEach((id, i) => { document.getElementById(id).value = filters[i]; });
+
+      const nextCards = listFlashcards();
+      if (nextCards.length === currentFcList.length && nextCards.every(card => wasShown.has(card.word))) {
+        // Cùng bộ thẻ: thay dữ liệu, giữ nguyên thứ tự và thẻ đang mở
+        const byWord = new Map(nextCards.map(card => [card.word, card]));
+        currentFcList = currentFcList.map(card => byWord.get(card.word));
+      } else {
+        buildFlashcards();
+        const index = currentFcList.findIndex(card => card.word === currentWord);
+        if (index > 0) showCard(index);
+      }
+
+      renderVocabGrid();
+      renderPhraseGrid();
+    }
+
+    function applySheetData(data) {
+      const progressMap = new Map();
+      data.progress.forEach(row => {
+        progressMap.set(progressKey(row["Loại mục"], (row["Nội dung"] || '').trim()), row);
+      });
+
+      // 2. Xử lý Tab Từ vựng
+      const savedLocalLevels = getSavedLevels();
+      const parsedVocab = [];
+      vocabWordMap.clear();
+
+      data.vocab.forEach(row => {
+        const word = (row["Từ / cụm từ"] || '').trim();
+        if (!word) return;
+
+        const progress = progressMap.get(progressKey(ITEM_VOCAB, word));
+        const sheetLv = progress ? parseInt(progress["Mức độ nhớ (1-5)"], 10) : NaN;
+        const level = !isNaN(sheetLv) && sheetLv >= 1 && sheetLv <= 5 ? sheetLv : (savedLocalLevels[word] || 1);
+
+        const item = {
+          word: word,
+          meaning: row["Nghĩa"] || '',
+          type: row["Loại"] || '',
+          topic: row["Chủ đề"] || '',
+          example: row["Câu ví dụ"] || '',
+          example_vi: row["Dịch câu ví dụ"] || '',
+          example_pinyin: row["Pinyin câu ví dụ"] || '',
+          phonetic: row["Phiên âm"] || '',
+          date: row["Ngày học"] || '',
+          level: level,
+          last_review: progress ? (progress["Lần ôn gần nhất"] || '') : ''
+        };
+        parsedVocab.push(item);
+        vocabWordMap.set(word.toLowerCase(), item);
+      });
+      rawVocab = parsedVocab;
+
+      // 3. Xử lý Tab Mẫu câu & Tạo liên kết Từ vựng ↔ Mẫu câu
+      wordToPhrasesMap.clear();
+      const parsedPhrases = [];
+
+      data.phrases.forEach(row => {
+        const phraseText = (row["Mẫu câu"] || '').trim();
+        if (!phraseText) return;
+
+        const progress = progressMap.get(progressKey(ITEM_PHRASE, phraseText));
+        const pItem = {
+          phrase: phraseText,
+          meaning: row["Nghĩa"] || '',
+          situation: row["Tình huống dùng"] || '',
+          used: (progress && progress["Đã dùng thực tế? (Có/Chưa)"] || 'Chưa').trim(),
+          date: row["Ngày học"] || '',
+          pinyin: row["Pinyin"] || '',
+          relatedWordsRaw: row["Từ vựng liên quan"] || '',
+          frame: row["Khung câu"] || '',
+          type: row["Loại"] || ''
+        };
+
+        // Phân tách các từ liên quan
+        const relatedList = [];
+        if (pItem.relatedWordsRaw && pItem.type !== "Câu giao tiếp chung") {
+          const words = pItem.relatedWordsRaw.split(',').map(w => w.trim()).filter(Boolean);
+          words.forEach(w => {
+            const norm = w.toLowerCase();
+            const exists = vocabWordMap.has(norm);
+            if (!exists) {
+              console.warn(`[Lỗi liên kết dữ liệu] Mẫu câu "${phraseText}" chứa từ vựng liên quan "${w}" nhưng không tìm thấy trong tab Từ vựng.`);
+            }
+            relatedList.push({ word: w, matched: exists });
+
+            // Lưu map từ -> danh sách mẫu câu
+            if (!wordToPhrasesMap.has(norm)) {
+              wordToPhrasesMap.set(norm, []);
+            }
+            wordToPhrasesMap.get(norm).push(pItem);
+          });
+        }
+        pItem.relatedWords = relatedList;
+        parsedPhrases.push(pItem);
+      });
+      rawPhrases = parsedPhrases;
+
+      // 4. Xử lý "Bộ từ hôm nay": server đã lọc theo ngày VN, ở đây ghép với Từ vựng
+      const todayStr = todayVN();
+
+      rawTodayVocab = data.today.map(tr => {
+        const w = (tr["Từ / cụm từ"] || '').trim();
+        const matchedVocab = vocabWordMap.get(w.toLowerCase());
+        const status = (tr["Mới / Ôn"] || 'Mới').trim();
+
+        if (matchedVocab) {
+          return {
+            ...matchedVocab,
+            status: status,
+            todayExample: tr["Mẫu câu đi kèm"] || matchedVocab.example,
+            todayExampleVi: tr["Dịch mẫu câu"] || matchedVocab.example_vi,
+            todayPinyin: tr["Pinyin mẫu câu"] || matchedVocab.example_pinyin
+          };
+        } else {
+          // Dòng trong Bộ hôm nay không khớp tab Từ vựng -> vẫn hiển thị đầy đủ
+          return {
+            word: w,
+            meaning: tr["Nghĩa"] || '',
+            phonetic: tr["Phiên âm"] || '',
+            example: tr["Mẫu câu đi kèm"] || '',
+            example_vi: tr["Dịch mẫu câu"] || '',
+            example_pinyin: tr["Pinyin mẫu câu"] || '',
+            type: '',
+            topic: 'Bộ từ hôm nay',
+            date: todayStr,
+            level: savedLocalLevels[w] || 1,
+            status: status
+          };
+        }
+      });
+
+      // 5. Áp dụng các thay đổi còn trong hàng đợi chưa gửi (đảm bảo không bị mất)
+      applyPendingSyncQueue();
     }
 
     function setFcMode(mode) {
@@ -3369,7 +3541,7 @@
     // ───────────────────────────────────────────────────────────
     // FLASHCARD
     // ───────────────────────────────────────────────────────────
-    function buildFlashcards() {
+    function listFlashcards() {
       const mode = document.querySelector('[data-action="fc-mode"].active')?.dataset.fcMode || 'all';
       const topic = document.getElementById('fc-topic-filter').value;
 
@@ -3389,8 +3561,11 @@
       if (isShuffled) {
         shuffleArray(list);
       }
+      return list;
+    }
 
-      currentFcList = list;
+    function buildFlashcards() {
+      currentFcList = listFlashcards();
       fcIndex = 0;
       showCard(0);
     }
@@ -3865,7 +4040,7 @@
       }
       // 2. Tải lại Google Sheet
       else if (action === 'refresh-sheet') {
-        loadSheetData();
+        loadSheetData({ fresh: true });
       }
       // 3. Chuyển chế độ Flashcard (Tất cả / Hôm nay / Cần ôn)
       else if (action === 'fc-mode') {
