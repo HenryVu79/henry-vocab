@@ -1,4 +1,4 @@
-// Henry Vocab – service worker: nhận thông báo nhắc từ.
+// Henry Vocab – service worker: mở app khi mất mạng và nhận thông báo nhắc từ.
 // Thông báo đẩy không mang nội dung; khi nhận, hỏi Supabase nội dung lần nhắc gần nhất của máy này.
 // Địa chỉ Supabase và khóa công khai được truyền qua tham số lúc đăng ký (?u=...&k=...).
 const params = new URL(self.location).searchParams;
@@ -6,8 +6,72 @@ const API_URL = (params.get('u') || '').replace(/\/+$/, '') + '/rest/v1/rpc/api'
 const API_KEY = params.get('k') || '';
 const LANG_FLAGS = { en: '🇬🇧', zh: '🇨🇳' };
 
-self.addEventListener('install', () => self.skipWaiting());
-self.addEventListener('activate', event => event.waitUntil(self.clients.claim()));
+// ─── MỞ APP KHI MẤT MẠNG ───
+// Chỉ lưu khung app cùng tên miền (trang, manifest, icon). Không bao giờ chặn Supabase hay phát âm.
+// Luôn hỏi mạng trước để bản mới deploy có hiệu lực ngay; mạng hỏng hoặc quá chậm mới dùng bản đã lưu.
+const SHELL_CACHE = 'henry-shell-v1';
+const SHELL_PAGE = new URL('./', self.location).href;
+const SHELL_FILES = ['manifest.webmanifest', 'icon-192.png', 'icon-512.png'].map(f => new URL(f, self.location).href);
+const NETWORK_WAIT_MS = 4000;
+
+self.addEventListener('install', event => {
+  event.waitUntil(caches.open(SHELL_CACHE)
+    .then(cache => cache.addAll([SHELL_PAGE, ...SHELL_FILES]))
+    .catch(() => { })
+    .then(() => self.skipWaiting()));
+});
+
+self.addEventListener('activate', event => {
+  event.waitUntil((async () => {
+    const names = await caches.keys();
+    await Promise.all(names.filter(n => n.startsWith('henry-shell-') && n !== SHELL_CACHE).map(n => caches.delete(n)));
+    await self.clients.claim();
+  })());
+});
+
+self.addEventListener('fetch', event => {
+  const req = event.request;
+  if (req.method !== 'GET') return;
+  const url = new URL(req.url);
+  if (url.origin !== self.location.origin) return;
+  if (req.mode === 'navigate') {
+    event.respondWith(networkFirst(event, req, SHELL_PAGE));
+  } else {
+    const file = url.origin + url.pathname;
+    if (SHELL_FILES.includes(file)) event.respondWith(networkFirst(event, req, file));
+  }
+});
+
+async function networkFirst(event, req, cacheKey) {
+  const cache = await caches.open(SHELL_CACHE);
+  const network = fetch(req).then(res => {
+    // Chỉ lưu trang trả về bình thường (không lưu lỗi, trang chuyển hướng)
+    if (res.ok && res.type === 'basic' && !res.redirected) {
+      const copy = res.clone();
+      event.waitUntil(cache.put(cacheKey, copy).catch(() => { }));
+    }
+    return res;
+  });
+  let timer;
+  const slow = new Promise(resolve => { timer = setTimeout(resolve, NETWORK_WAIT_MS); });
+  try {
+    const res = await Promise.race([network, slow]);
+    if (res) return res;
+    // Mạng quá chậm: dùng bản đã lưu nếu có, mạng vẫn chạy tiếp để cập nhật cho lần sau
+    const saved = await cache.match(cacheKey);
+    if (saved) {
+      event.waitUntil(network.catch(() => { }));
+      return saved;
+    }
+    return await network;
+  } catch (err) {
+    const saved = await cache.match(cacheKey);
+    if (saved) return saved;
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 self.addEventListener('push', event => event.waitUntil(showNudge()));
 

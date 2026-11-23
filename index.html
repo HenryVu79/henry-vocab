@@ -1251,6 +1251,22 @@
       opacity: 1;
     }
 
+    .list-more {
+      grid-column: 1 / -1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 0 4px;
+      color: var(--muted);
+      font-size: .85rem;
+    }
+
+    .list-more .btn-secondary {
+      width: auto;
+      min-width: 220px;
+    }
+
     .empty {
       text-align: center;
       padding: 50px 20px;
@@ -3306,14 +3322,110 @@
       } catch (e) { }
     }
 
+    // Dữ liệu học lớn dần theo thời gian nên lưu trong IndexedDB (localStorage chỉ chứa được vài MB).
+    // Phiên không "Ghi nhớ" vẫn dùng sessionStorage để đóng tab là mất.
+    // dataMem giữ bản mới nhất trong bộ nhớ để đọc ngay sau khi ghi không phải chờ ổ đĩa.
+    const IDB_NAME = 'henry-vocab';
+    const IDB_STORE = 'cache';
+    const dataMem = new Map();
+    let idbPromise = null;
+    let dataCacheChain = Promise.resolve();
+
+    function openIdb() {
+      if (!idbPromise) {
+        idbPromise = new Promise((resolve, reject) => {
+          if (!window.indexedDB) { reject(new Error('Không có IndexedDB')); return; }
+          const req = indexedDB.open(IDB_NAME, 1);
+          req.onupgradeneeded = () => req.result.createObjectStore(IDB_STORE);
+          req.onsuccess = () => resolve(req.result);
+          req.onerror = () => reject(req.error);
+          req.onblocked = () => reject(new Error('IndexedDB bị chặn'));
+        }).catch(() => null);
+      }
+      return idbPromise;
+    }
+
+    async function idbRequest(mode, run) {
+      const db = await openIdb();
+      if (!db) throw new Error('Không có IndexedDB');
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(IDB_STORE, mode);
+        const req = run(tx.objectStore(IDB_STORE));
+        tx.oncomplete = () => resolve(req.result);
+        tx.onerror = tx.onabort = () => reject(tx.error);
+      });
+    }
+
+    async function dataStoreGet(key) {
+      if (cacheStorage() === sessionStorage) {
+        try { return sessionStorage.getItem(key); } catch (e) { return null; }
+      }
+      try {
+        const value = await idbRequest('readonly', store => store.get(key));
+        if (typeof value === 'string') return value;
+        // Bản cũ lưu trong localStorage: chuyển sang IndexedDB
+        const old = localStorage.getItem(key);
+        if (old) {
+          await idbRequest('readwrite', store => store.put(old, key));
+          localStorage.removeItem(key);
+        }
+        return old;
+      } catch (e) {
+        try { return localStorage.getItem(key); } catch (e2) { return null; }
+      }
+    }
+
+    async function dataStorePut(key, text) {
+      if (cacheStorage() === sessionStorage) {
+        try { sessionStorage.setItem(key, text); } catch (e) { }
+        return;
+      }
+      try {
+        await idbRequest('readwrite', store => store.put(text, key));
+      } catch (e) {
+        try { localStorage.setItem(key, text); } catch (e2) { }
+      }
+    }
+
+    async function readDataCache(key) {
+      const text = dataMem.has(key) ? dataMem.get(key) : await dataStoreGet(key);
+      try { return text ? JSON.parse(text) : null; } catch (e) { return null; }
+    }
+
+    function writeDataCache(key, value) {
+      const text = JSON.stringify(value);
+      dataMem.set(key, text);
+      dataCacheChain = dataCacheChain.then(() => dataStorePut(key, text));
+      return dataCacheChain;
+    }
+
+    // Đọc - sửa - ghi lần lượt, hai lần sửa liền nhau không đè mất nhau
+    function updateDataCache(key, change) {
+      const run = dataCacheChain.then(async () => {
+        const data = await readDataCache(key);
+        if (!data) return;
+        change(data);
+        const text = JSON.stringify(data);
+        dataMem.set(key, text);
+        await dataStorePut(key, text);
+      }).catch(() => { });
+      dataCacheChain = run;
+      return run;
+    }
+
     function clearUserCache() {
       const keys = [profileCacheKey(), dataCacheKey('en'), dataCacheKey('zh')];
+      keys.forEach(key => dataMem.delete(key));
       try {
         keys.forEach(key => {
           localStorage.removeItem(key);
           sessionStorage.removeItem(key);
         });
       } catch (e) { }
+      dataCacheChain = dataCacheChain.then(() => idbRequest('readwrite', store => {
+        keys.forEach(key => store.delete(key));
+        return store.count();
+      })).catch(() => { });
     }
 
     function clearSession() {
@@ -3622,7 +3734,7 @@
 
       if (preloaded && preloaded.lang === currentLang) {
         loadSeq++;  // Bỏ phản hồi đang chờ của chế độ khách
-        writeCache(dataCacheKey(currentLang), preloaded.data);
+        writeDataCache(dataCacheKey(currentLang), preloaded.data);
         showLoadedData(preloaded.data, currentLang);
         announceLoaded(currentLang);
       } else {
@@ -3872,6 +3984,15 @@
     function swUrl() {
       return `/sw.js?u=${encodeURIComponent(SUPABASE_URL)}&k=${encodeURIComponent(SUPABASE_KEY)}`;
     }
+
+    // Đăng ký service worker cho mọi người để mở được app khi mất mạng (cùng địa chỉ với thông báo nhắc từ)
+    function registerOfflineSupport() {
+      if (!('serviceWorker' in navigator) || !/^https?:$/.test(location.protocol)) return;
+      navigator.serviceWorker.register(swUrl(), { scope: '/' })
+        .catch(err => console.warn('Không bật được chế độ mất mạng:', err && err.message));
+    }
+    if (document.readyState === 'complete') registerOfflineSupport();
+    else window.addEventListener('load', registerOfflineSupport);
 
     function base64UrlToBytes(text) {
       const raw = atob(text.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((text.length + 3) % 4));
@@ -4384,11 +4505,7 @@
 
     function rememberSavedItems(lang, items) {
       recentSaves.push(...items);
-      const key = dataCacheKey(lang);
-      const data = readCache(key);
-      if (!data) return;
-      items.forEach(item => patchProgressRows(data, item));
-      writeCache(key, data);
+      updateDataCache(dataCacheKey(lang), data => items.forEach(item => patchProgressRows(data, item)));
     }
 
     // Trên điện thoại chỉ hiện icon, nội dung đầy đủ nằm ở tooltip
@@ -4554,7 +4671,8 @@
       const lang = currentLang;
       const savesBefore = recentSaves.length;
       const cacheKey = dataCacheKey(lang);
-      const cached = fresh ? null : readCache(cacheKey);
+      const cached = fresh ? null : await readDataCache(cacheKey);
+      if (seq !== loadSeq) return;
 
       if (background) {
         // không hiện lại dữ liệu cũ
@@ -4568,10 +4686,21 @@
 
       try {
         const isGuest = !currentEmail;
-        const result = isGuest
-          ? await postApi({ action: 'publicData', lang, track: currentTrack(lang) })
-          : await api('bootstrap', { lang, fresh });
+        const request = have => isGuest
+          ? postApi({ action: 'publicData', lang, track: currentTrack(lang), have })
+          : api('bootstrap', { lang, fresh, have });
+        let result = await request(cacheHave(cached));
         if (seq !== loadSeq) return;
+        // Chỉ nhận phần thay đổi: ghép vào bản đã lưu; ghép không khớp thì tải lại đủ
+        const previous = await readDataCache(cacheKey);
+        if (seq !== loadSeq) return;
+        let merged = mergeServerData(previous, result.data);
+        if (!merged) {
+          result = await request(undefined);
+          if (seq !== loadSeq) return;
+          merged = mergeServerData(null, result.data);
+        }
+        result.data = merged;
 
         if (!isGuest) {
           applyProfile(result.profile);
@@ -4587,10 +4716,11 @@
           .filter(item => item.lang === lang)
           .forEach(item => patchProgressRows(data, item));
 
-        const changed = JSON.stringify(readCache(cacheKey)) !== JSON.stringify(data);
-        writeCache(cacheKey, data);
+        const changed = JSON.stringify(previous) !== JSON.stringify(data);
+        writeDataCache(cacheKey, data);
 
         if (!cached) {
+          hideToastIf('Đang tải dữ liệu...');
           showLoadedData(data, lang);
           if (!background) announceLoaded(lang);
         } else if (changed && !apRunning) {
@@ -4610,6 +4740,36 @@
           toast('❌ ' + err.message);
         }
       }
+    }
+
+    // "Dấu" của bản đã lưu, gửi lên để máy chủ chỉ trả phần thay đổi
+    function cacheHave(cached) {
+      if (!cached || !Array.isArray(cached.vocab) || !Array.isArray(cached.phrases)) return undefined;
+      const have = { vocabHash: cached.vocabHash, phrasesHash: cached.phrasesHash };
+      if (cached.progressStamp && Array.isArray(cached.progress)) have.progressStamp = cached.progressStamp;
+      return have.vocabHash ? have : undefined;
+    }
+
+    // Trả về dữ liệu đầy đủ, hoặc null nếu bản đã lưu không ghép được (phải tải lại đủ)
+    function mergeServerData(previous, data) {
+      if (!data) return null;
+      const merged = { ...data };
+      for (const part of ['vocab', 'phrases']) {
+        if (Array.isArray(data[part])) continue;
+        if (!previous || !Array.isArray(previous[part]) || previous[part + 'Hash'] !== data[part + 'Hash']) return null;
+        merged[part] = previous[part];
+      }
+      if (!Array.isArray(data.progress)) return null;
+      if (data.progressDelta) {
+        if (!previous || !Array.isArray(previous.progress)) return null;
+        const rowKey = row => progressKey(row["Loại mục"], (row["Nội dung"] || '').trim());
+        const rows = new Map(previous.progress.map(row => [rowKey(row), row]));
+        data.progress.forEach(row => rows.set(rowKey(row), row));
+        if (rows.size !== data.progressCount) return null;
+        merged.progress = [...rows.values()];
+        delete merged.progressDelta;
+      }
+      return merged;
     }
 
     function loadedLabel(lang) {
@@ -4661,8 +4821,8 @@
         if (index > 0) showCard(index);
       }
 
-      renderVocabGrid();
-      renderPhraseGrid();
+      renderVocabGrid({ keepPage: true });
+      renderPhraseGrid({ keepPage: true });
     }
 
     function applySheetData(data) {
@@ -5482,7 +5642,24 @@
     // ───────────────────────────────────────────────────────────
     // LIST VOCAB
     // ───────────────────────────────────────────────────────────
-    function renderVocabGrid() {
+    // Danh sách dài thì chỉ vẽ từng trang 50 mục, bấm "Xem thêm" để hiện tiếp
+    const LIST_PAGE = 50;
+    const listLimit = { vocab: LIST_PAGE, phrase: LIST_PAGE };
+
+    function moreButton(kind, shown, total, unit) {
+      if (shown >= total) return '';
+      const next = Math.min(LIST_PAGE, total - shown);
+      return `<div class="list-more"><span>Đang hiện ${shown}/${total} ${unit}</span><button class="btn-secondary" data-action="list-more" data-list="${kind}">Xem thêm ${next} ${unit}</button></div>`;
+    }
+
+    function debounce(fn, ms) {
+      let timer = null;
+      return () => { clearTimeout(timer); timer = setTimeout(fn, ms); };
+    }
+
+    // keepPage: dữ liệu cập nhật ở nền thì giữ số mục đang hiện; đổi bộ lọc thì về trang đầu
+    function renderVocabGrid({ keepPage = false } = {}) {
+      if (!keepPage) listLimit.vocab = LIST_PAGE;
       const q = document.getElementById('vocab-search').value.toLowerCase().trim();
       const topic = document.getElementById('vocab-topic').value;
       const levelFilter = document.getElementById('vocab-level').value;
@@ -5505,7 +5682,8 @@
         return;
       }
 
-      container.innerHTML = list.map(v => {
+      const shown = list.slice(0, listLimit.vocab);
+      container.innerHTML = shown.map(v => {
         const { main, extra } = groupLinkedPhrases(v.word);
         const linkedLabel = [
           main.length > 0 ? `💬 ${main.length} mẫu câu` : '',
@@ -5547,13 +5725,14 @@
         </div>
       </div>
     `;
-      }).join('');
+      }).join('') + moreButton('vocab', shown.length, list.length, 'từ');
     }
 
     // ───────────────────────────────────────────────────────────
     // LIST PHRASES
     // ───────────────────────────────────────────────────────────
-    function renderPhraseGrid() {
+    function renderPhraseGrid({ keepPage = false } = {}) {
+      if (!keepPage) listLimit.phrase = LIST_PAGE;
       const q = document.getElementById('phrase-search').value.toLowerCase().trim();
       const typeFilter = document.getElementById('phrase-type-filter').value;
       const situation = document.getElementById('phrase-situation').value;
@@ -5585,7 +5764,8 @@
         return;
       }
 
-      container.innerHTML = list.map(p => {
+      const shown = list.slice(0, listLimit.phrase);
+      container.innerHTML = shown.map(p => {
         const isUsed = p.used === 'Có';
 
         return `
@@ -5630,7 +5810,7 @@
         </div>
       </div>
     `;
-      }).join('');
+      }).join('') + moreButton('phrase', shown.length, list.length, 'câu');
     }
 
     function togglePhraseUsed(phraseText) {
@@ -5646,7 +5826,7 @@
       p.used = newStatus;
 
       // Cập nhật giao diện
-      renderPhraseGrid();
+      renderPhraseGrid({ keepPage: true });
 
       // Lưu tiến độ
       queueChange({ lang: currentLang, itemType: ITEM_PHRASE, content: phraseText, used: newStatus });
@@ -5824,6 +6004,13 @@
         document.getElementById('vocab-search').value = word;
         renderVocabGrid();
       }
+      // 9b. Hiện thêm một trang trong danh sách Từ / Câu
+      else if (action === 'list-more') {
+        const kind = target.dataset.list;
+        listLimit[kind] += LIST_PAGE;
+        if (kind === 'vocab') renderVocabGrid({ keepPage: true });
+        else renderPhraseGrid({ keepPage: true });
+      }
       // 10. Lọc mẫu câu theo từ vựng (từ badge trên thẻ từ vựng)
       else if (action === 'filter-phrase-by-word') {
         filterPhrasesByWord(target.dataset.word);
@@ -5939,14 +6126,15 @@
     });
 
     // Input listeners
-    document.getElementById('vocab-search').addEventListener('input', renderVocabGrid);
-    document.getElementById('vocab-topic').addEventListener('change', renderVocabGrid);
-    document.getElementById('vocab-level').addEventListener('change', renderVocabGrid);
+    // Gõ tìm kiếm: chờ ngừng gõ một chút mới lọc, danh sách dài không bị giật
+    document.getElementById('vocab-search').addEventListener('input', debounce(() => renderVocabGrid(), 150));
+    document.getElementById('vocab-topic').addEventListener('change', () => renderVocabGrid());
+    document.getElementById('vocab-level').addEventListener('change', () => renderVocabGrid());
 
-    document.getElementById('phrase-search').addEventListener('input', renderPhraseGrid);
-    document.getElementById('phrase-type-filter').addEventListener('change', renderPhraseGrid);
-    document.getElementById('phrase-situation').addEventListener('change', renderPhraseGrid);
-    document.getElementById('phrase-word-filter').addEventListener('change', renderPhraseGrid);
+    document.getElementById('phrase-search').addEventListener('input', debounce(() => renderPhraseGrid(), 150));
+    document.getElementById('phrase-type-filter').addEventListener('change', () => renderPhraseGrid());
+    document.getElementById('phrase-situation').addEventListener('change', () => renderPhraseGrid());
+    document.getElementById('phrase-word-filter').addEventListener('change', () => renderPhraseGrid());
 
     document.getElementById('fc-topic-filter').addEventListener('change', () => { setFcOptionsOpen(false); buildFlashcards(); });
     document.getElementById('fc-day-filter').addEventListener('change', event => { setFcOptionsOpen(false); selectDay(event.target.value); });
@@ -6006,6 +6194,10 @@
 
     // Toast thông báo
     let toastTimer;
+    function hideToastIf(text) {
+      const el = document.getElementById('toast');
+      if (el.textContent === text) el.classList.remove('show');
+    }
     function toast(msg) {
       const el = document.getElementById('toast');
       el.textContent = msg;
