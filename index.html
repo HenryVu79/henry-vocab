@@ -1088,6 +1088,146 @@
       border-radius: 3px;
     }
 
+    /* TIẾN ĐỘ HÔM NAY, CHUỖI NGÀY, HOÀN THÀNH BỘ */
+    body.guest .user-only,
+    body:not(.guest) .guest-only {
+      display: none;
+    }
+
+    .stat-card .val small {
+      font-size: .6em;
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    .today-bar {
+      height: 5px;
+      margin: 3px 8px 2px;
+      border-radius: 3px;
+      background: #e2e8f0;
+      overflow: hidden;
+    }
+
+    .today-bar span {
+      display: block;
+      height: 100%;
+      width: 0;
+      border-radius: 3px;
+      background: var(--success);
+      transition: width .3s;
+    }
+
+    .stat-streak.cold .val {
+      color: var(--muted);
+    }
+
+    .stat-card.pulse {
+      animation: stat-pulse .5s;
+    }
+
+    @keyframes stat-pulse {
+      40% { transform: scale(1.08); background: var(--success-light); }
+    }
+
+    .fc-done {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+      padding: 28px 18px;
+      border-radius: 20px;
+      background: var(--card);
+      box-shadow: var(--shadow);
+      text-align: center;
+    }
+
+    .fc-done.hidden {
+      display: none;
+    }
+
+    .fc-done-emoji {
+      font-size: 3rem;
+      line-height: 1;
+    }
+
+    .fc-done h3 {
+      font-size: 1.25rem;
+    }
+
+    .fc-done p {
+      color: var(--muted);
+      font-size: .92rem;
+      line-height: 1.5;
+    }
+
+    .fc-done-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      width: 100%;
+      max-width: 320px;
+      margin-top: 6px;
+    }
+
+    .fc-done-actions button {
+      min-height: 46px;
+      padding: 10px 16px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: #fff;
+      color: var(--text);
+      font-size: .95rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .fc-done-actions button.primary {
+      border-color: var(--primary);
+      background: var(--primary);
+      color: #fff;
+    }
+
+    /* Tùy chọn thẻ: máy tính hiện sẵn, điện thoại gom vào nút ⚙️ */
+    .fc-options {
+      display: contents;
+    }
+
+    .fc-options-toggle,
+    .fc-chips {
+      display: none;
+    }
+
+    .fc-opt-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 18px;
+      height: 18px;
+      margin-left: 3px;
+      padding: 0 4px;
+      border-radius: 9px;
+      background: var(--primary);
+      color: #fff;
+      font-size: .72rem;
+      font-weight: 700;
+    }
+
+    .fc-opt-badge.hidden {
+      display: none;
+    }
+
+    .flashcard {
+      touch-action: pan-y;
+    }
+
+    .swipe-hint {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: .78rem;
+      text-align: center;
+    }
+
     /* TOAST */
     #toast {
       position: fixed;
@@ -1923,6 +2063,11 @@
         border-radius: 50%;
       }
 
+      .user-btn .user-avatar {
+        width: 34px;
+        height: 34px;
+      }
+
       .user-btn.guest-login {
         padding: 4px 10px;
         border-radius: 20px;
@@ -1989,6 +2134,113 @@
         display: none;
       }
 
+      /* Thông báo hiện ở trên để không che nút chấm mức và nút Từ tiếp theo ở dưới */
+      #toast {
+        top: calc(10px + env(safe-area-inset-top, 0px));
+        bottom: auto;
+        right: auto;
+        left: 50%;
+        transform: translateX(-50%);
+        width: max-content;
+        text-align: center;
+      }
+
+      /* Nút đủ lớn cho ngón tay */
+      .user-btn.guest-login {
+        min-height: 36px;
+        padding: 6px 12px;
+      }
+
+      .lang-btn {
+        min-height: 36px;
+        padding: 6px 12px !important;
+        font-size: .85rem !important;
+      }
+
+      .btn-action {
+        min-width: 38px;
+        min-height: 36px;
+      }
+
+      #tab-flashcard .mode-btn {
+        min-height: 40px;
+      }
+
+      #tab-flashcard .tool-btn,
+      #tab-flashcard select {
+        min-height: 40px;
+      }
+
+      .fc-options-toggle {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 auto;
+        min-width: 48px;
+      }
+
+      .fc-options {
+        display: none;
+        flex: 0 0 100%;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+
+      .fc-options.open {
+        display: flex;
+      }
+
+      .fc-chips:not(:empty) {
+        display: flex;
+        flex: 0 0 100%;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+
+      .fc-chips button {
+        min-height: 32px;
+        padding: 4px 10px;
+        border: 1px solid #bfdbfe;
+        border-radius: 16px;
+        background: var(--primary-light);
+        color: var(--primary-dark);
+        font-size: .8rem;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      #fc-audio-btns {
+        flex-wrap: nowrap;
+        width: 100%;
+        gap: 6px;
+      }
+
+      #fc-audio-btns .audio-btn {
+        flex: 1 1 0;
+        max-width: calc((100% - 12px) / 3);
+        justify-content: center;
+        min-height: 42px;
+        padding: 8px 6px;
+      }
+
+      .audio-btn.rel {
+        min-height: 36px;
+        padding: 6px 12px;
+        font-size: .8rem;
+      }
+
+      .badge-linked-phrases {
+        min-height: 32px;
+      }
+
+      .chip-word {
+        min-height: 30px;
+      }
+
+      .btn-used-toggle {
+        min-height: 36px;
+      }
+
       /* Thống kê: 1 hàng 4 ô */
       .stats-bar {
         display: grid;
@@ -2010,7 +2262,7 @@
       }
 
       .stat-card .lbl {
-        font-size: .64rem;
+        font-size: .75rem;
         margin-top: 0;
         white-space: nowrap;
       }
@@ -2024,8 +2276,8 @@
       .tab {
         flex: 1;
         min-width: 0;
-        padding: 9px 2px;
-        font-size: .8rem;
+        padding: 10px 2px;
+        font-size: .84rem;
         text-align: center;
       }
 
@@ -2046,7 +2298,7 @@
       /* Khối điều khiển Flashcard gọn lại */
       #tab-flashcard .controls {
         gap: 6px;
-        padding: 8px;
+        padding: 6px;
         margin-bottom: 8px;
       }
 
@@ -2105,7 +2357,7 @@
         align-items: center;
         gap: 1px;
         padding: 6px 2px;
-        font-size: .66rem;
+        font-size: .72rem;
       }
 
       .level-btn .lv-emoji {
@@ -2406,19 +2658,28 @@
   </header>
 
   <div class="stats-bar">
-    <div class="stat-card">
-      <div class="val" id="s-vocab">0</div>
-      <div class="lbl"><span class="lbl-long">Từ đã học</span><span class="lbl-short">Đã học</span></div>
+    <div class="stat-card stat-streak user-only" id="stat-streak" title="Số ngày học liên tiếp">
+      <div class="val" id="s-streak">0</div>
+      <div class="lbl">🔥 <span class="lbl-long">Ngày học liên tiếp</span><span class="lbl-short">Chuỗi ngày</span></div>
     </div>
-    <div class="stat-card">
-      <div class="val" id="s-today">0</div>
-      <div class="lbl"><span class="lbl-long">Bộ hôm nay</span><span class="lbl-short">Hôm nay</span></div>
+    <div class="stat-card stat-today" id="stat-today">
+      <div class="val"><span id="s-today-done">0</span><small>/<span id="s-today">0</span></small></div>
+      <div class="today-bar" aria-hidden="true"><span id="s-today-bar"></span></div>
+      <div class="lbl" id="s-today-lbl">Hôm nay</div>
     </div>
-    <div class="stat-card">
+    <div class="stat-card user-only">
       <div class="val" id="s-mastered">0</div>
       <div class="lbl"><span class="lbl-long">Đã nhớ chắc (Lv 4-5)</span><span class="lbl-short">Nhớ chắc</span></div>
     </div>
     <div class="stat-card">
+      <div class="val" id="s-vocab">0</div>
+      <div class="lbl" id="s-vocab-lbl">Đã học</div>
+    </div>
+    <div class="stat-card guest-only">
+      <div class="val" id="s-total">0</div>
+      <div class="lbl"><span class="lbl-long">Từ trong kho</span><span class="lbl-short">Kho từ</span></div>
+    </div>
+    <div class="stat-card guest-only">
       <div class="val" id="s-phrases">0</div>
       <div class="lbl"><span class="lbl-long">Mẫu câu</span><span class="lbl-short">Câu</span></div>
     </div>
@@ -2445,7 +2706,12 @@
           <button class="mode-btn active" data-action="fc-mode" data-fc-mode="today">Bộ hôm nay</button>
           <button class="mode-btn" data-action="fc-mode" data-fc-mode="review">Cần ôn<span class="lbl-long"> (Lv &lt;
               4)</span></button>
+          <button class="tool-btn fc-options-toggle" id="fc-options-toggle" type="button" data-action="toggle-fc-options"
+            aria-expanded="false" aria-controls="fc-options" title="Tùy chọn: lộ trình, ngày, chủ đề, xáo trộn, đảo chiều">⚙️<span
+              class="fc-opt-badge hidden" id="fc-opt-badge"></span></button>
         </div>
+        <div class="fc-chips" id="fc-chips"></div>
+        <div class="fc-options" id="fc-options">
         <select id="fc-track-filter" class="hidden" aria-label="Chọn lộ trình học"></select>
         <select id="fc-day-filter" class="hidden" aria-label="Chọn ngày để học lại">
           <option value="">📅 Học lại ngày khác</option>
@@ -2456,9 +2722,16 @@
         <button class="tool-btn" id="btn-shuffle" data-action="toggle-shuffle" title="Xáo trộn thứ tự thẻ ngẫu nhiên">🔀<span class="lbl-long"> Xáo trộn</span></button>
         <button class="tool-btn" id="btn-reverse" data-action="toggle-reverse"
           title="Đảo chiều: Xem nghĩa tiếng Việt trước ➔ Tự nhớ từ ➔ Xem đáp án">🔄<span class="lbl-long"> Đảo chiều</span></button>
+        </div>
       </div>
 
       <div class="flashcard-wrap">
+        <div class="fc-done hidden" id="fc-done" role="status" aria-live="polite">
+          <div class="fc-done-emoji" id="fc-done-emoji">🎉</div>
+          <h3 id="fc-done-title"></h3>
+          <p id="fc-done-text"></p>
+          <div class="fc-done-actions" id="fc-done-actions"></div>
+        </div>
         <div class="flashcard" id="flashcard">
           <div class="fc-top-bar">
             <div class="fc-badges" id="fc-status-badges"></div>
@@ -2506,10 +2779,10 @@
 
           <!-- Nút phát âm trên Flashcard -->
           <div class="audio-btns" id="fc-audio-btns">
-            <button class="audio-btn en" data-action="speak-fc-word">🔊 Phát âm từ</button>
-            <button class="audio-btn vi hidden" id="btn-fc-speak-vi" data-action="speak-fc-vi">🔊 Nghĩa tiếng
-              Việt</button>
-            <button class="audio-btn ex hidden" id="btn-fc-speak-ex" data-action="speak-fc-ex">🔊 Câu ví dụ</button>
+            <button class="audio-btn en" data-action="speak-fc-word">🔊 <span class="lbl-long">Phát âm từ</span><span class="lbl-short">Từ</span></button>
+            <button class="audio-btn vi hidden" id="btn-fc-speak-vi" data-action="speak-fc-vi">🔊 <span class="lbl-long">Nghĩa tiếng
+              Việt</span><span class="lbl-short">Nghĩa</span></button>
+            <button class="audio-btn ex hidden" id="btn-fc-speak-ex" data-action="speak-fc-ex">🔊 <span class="lbl-long">Câu ví dụ</span><span class="lbl-short">Câu</span></button>
           </div>
 
           <button class="reveal-btn" id="reveal-btn" data-action="reveal-card">👁️ Xem nghĩa</button>
@@ -2532,6 +2805,7 @@
           <span id="fc-idx" style="font-size:.85rem;color:var(--muted);min-width:60px;text-align:center;">0 / 0</span>
           <button class="nav-btn" data-action="next-card" title="Từ tiếp theo">▶</button>
         </div>
+        <div class="swipe-hint hidden" id="swipe-hint">👆 Mẹo: vuốt thẻ sang trái/phải để chuyển từ</div>
       </div>
     </div>
 
@@ -4262,6 +4536,8 @@
     setInterval(refreshIfStale, 60 * 1000);
     let fellBackToAllCards = false;
     let totalWords = 0;         // Số từ trong kho của ngôn ngữ đang học
+    let studyStreak = 0;        // Số ngày học liên tiếp (máy chủ tính, hôm nay chưa học thì tính đến hôm qua)
+    let studiedToday = false;
 
     function progressKey(itemType, content) {
       return `${itemType}\n${content}`;
@@ -4340,9 +4616,12 @@
       return `${langLabel(lang)} • Cập nhật lúc: ${new Date().toLocaleTimeString('vi-VN')} (đã học ${rawVocab.length}${totalWords ? '/' + totalWords : ''} từ, ${rawPhrases.length} mẫu câu)`;
     }
 
+    // Chỉ báo "đã tải xong" khi người dùng tự bấm Tải lại; mở app bình thường thì không cần
+    let announceNextLoad = false;
     function announceLoaded(lang) {
       setLastSyncLabel(loadedLabel(lang));
-      if (!fellBackToAllCards) toast(`✅ Đã tải xong dữ liệu ${langLabel(lang)}!`);
+      if (announceNextLoad && !fellBackToAllCards) toast(`✅ Đã tải xong dữ liệu ${langLabel(lang)}!`);
+      announceNextLoad = false;
     }
 
     function showLoadedData(data, lang) {
@@ -4470,6 +4749,8 @@
 
       // 4. Xử lý "Bộ từ hôm nay": server đã lọc theo ngày VN, ở đây ghép với Từ vựng
       totalWords = data.totalWords || 0;
+      studyStreak = data.streak || 0;
+      studiedToday = Boolean(data.studiedToday);
       rawTodayVocab = toDayCards(data.today, todayVN());
       rawDayVocab = selectedDay ? toDayCards(rawDayRows, selectedDay) : [];
       availableDays = data.days || [];
@@ -4513,6 +4794,33 @@
           status: status
         };
       });
+    }
+
+    function setFcOptionsOpen(open) {
+      document.getElementById('fc-options').classList.toggle('open', open);
+      document.getElementById('fc-options-toggle').setAttribute('aria-expanded', String(open));
+      document.getElementById('fc-options-toggle').classList.toggle('active', open);
+      renderFcChips();
+    }
+
+    // Tùy chọn đang bật hiện thành nhãn nhỏ khi khung tùy chọn đóng, bấm vào để mở
+    function renderFcChips() {
+      const chips = [];
+      const trackSel = document.getElementById('fc-track-filter');
+      if (!trackSel.classList.contains('hidden') && trackSel.value && trackSel.value !== 'all') {
+        chips.push('🧭 ' + (TRACK_LABELS[currentLang] || TRACK_LABELS.en)[trackSel.value]);
+      }
+      if (selectedDay) chips.push('📅 ' + formatDay(selectedDay, false));
+      const topic = document.getElementById('fc-topic-filter').value;
+      if (topic) chips.push('🏷️ ' + topic);
+      if (isShuffled) chips.push('🔀 Xáo trộn');
+      if (isReverseMode) chips.push('🔄 Đảo chiều');
+      const open = document.getElementById('fc-options').classList.contains('open');
+      document.getElementById('fc-chips').innerHTML = open ? '' : chips.map(c =>
+        `<button type="button" data-action="toggle-fc-options">${escapeHTML(c)}</button>`).join('');
+      const badge = document.getElementById('fc-opt-badge');
+      badge.textContent = chips.length;
+      badge.classList.toggle('hidden', !chips.length);
     }
 
     function setFcMode(mode) {
@@ -4730,17 +5038,62 @@
       });
     }
 
+    // Khách: các từ của bộ hôm nay đã lật xem (lưu trên máy, theo ngày)
+    function guestSeenKey() {
+      return `henry_guest_seen_${currentLang}_${todayVN()}`;
+    }
+
+    function guestSeenWords() {
+      try { return new Set(JSON.parse(localStorage.getItem(guestSeenKey()) || '[]')); } catch (e) { return new Set(); }
+    }
+
+    function markGuestSeen(word) {
+      const seen = guestSeenWords();
+      if (seen.has(word)) return;
+      seen.add(word);
+      try {
+        localStorage.setItem(guestSeenKey(), JSON.stringify([...seen]));
+        Object.keys(localStorage).filter(k => k.startsWith('henry_guest_seen_') && !k.endsWith(todayVN())).forEach(k => localStorage.removeItem(k));
+      } catch (e) { }
+    }
+
+    // Số từ của bộ hôm nay đã xong: tài khoản = đã chấm hôm nay, khách = đã lật xem
+    function todayProgress() {
+      const today = todayCards();
+      const seen = currentEmail ? null : guestSeenWords();
+      const done = today.filter(c => currentEmail ? c.last_review === todayVN() : seen.has(c.word)).length;
+      return { done, total: today.length };
+    }
+
     function updateStats() {
       const mastered = rawVocab.filter(v => v.level >= 4).length;
-      // Số từ trong bộ hôm nay (nếu không có thì đếm từ vựng có Ngày học = todayVN)
-      const todayCount = rawTodayVocab.length > 0
-        ? rawTodayVocab.length
-        : rawVocab.filter(v => v.date === todayVN()).length;
+      const { done, total } = todayProgress();
 
       document.getElementById('s-vocab').textContent = rawVocab.length;
-      document.getElementById('s-today').textContent = todayCount;
+      document.getElementById('s-vocab-lbl').textContent = currentEmail ? 'Đã học' : 'Đã gặp';
+      document.getElementById('s-today').textContent = total;
+      document.getElementById('s-today-done').textContent = done;
+      document.getElementById('s-today-bar').style.width = total ? `${Math.round(done / total * 100)}%` : '0';
+      document.getElementById('s-today-lbl').innerHTML = `<span class="lbl-long">${currentEmail ? 'Đã chấm hôm nay' : 'Đã xem hôm nay'}</span><span class="lbl-short">Hôm nay</span>`;
+      document.getElementById('stat-today').title = currentEmail
+        ? `Đã chấm ${done}/${total} từ của bộ hôm nay`
+        : `Đã xem ${done}/${total} từ của bộ hôm nay`;
       document.getElementById('s-mastered').textContent = mastered;
       document.getElementById('s-phrases').textContent = rawPhrases.length;
+      document.getElementById('s-total').textContent = totalWords ? totalWords.toLocaleString('vi-VN') : '–';
+      document.getElementById('s-streak').textContent = studyStreak;
+      const streakCard = document.getElementById('stat-streak');
+      streakCard.classList.toggle('cold', !studiedToday);
+      streakCard.title = studiedToday
+        ? `Đã học ${studyStreak} ngày liên tiếp, tính cả hôm nay`
+        : 'Chấm ít nhất 1 thẻ hôm nay để giữ chuỗi ngày học';
+    }
+
+    function pulseStat(id) {
+      const el = document.getElementById(id);
+      el.classList.remove('pulse');
+      void el.offsetWidth;
+      el.classList.add('pulse');
     }
 
     function populateFilters() {
@@ -4817,6 +5170,7 @@
     }
 
     function buildFlashcards() {
+      fcSubsetRound = false;
       currentFcList = listFlashcards();
       fcIndex = 0;
       showCard(0);
@@ -4830,6 +5184,8 @@
     }
 
     function showCard(idx) {
+      hideDone();
+      renderFcChips();
       if (!currentFcList.length) {
         document.getElementById('fc-word').textContent = 'Không có từ vựng nào';
         document.getElementById('fc-counter').textContent = '0 / 0';
@@ -4949,6 +5305,10 @@
       if (!currentFcList.length) return;
       fcRevealed = true;
       const card = currentFcList[fcIndex];
+      if (!currentEmail && isTodayFlow() && todayCards().some(c => c.word === card.word)) {
+        markGuestSeen(card.word);
+        updateStats();
+      }
 
       // Nếu đang ở chế độ đảo chiều: hiển thị mặt trước từ vựng lên
       if (isReverseMode) {
@@ -4999,7 +5359,95 @@
       }
     }
 
-    function nextCard() { showCard(fcIndex + 1); }
+    let fcSubsetRound = false; // Đang chấm nốt / ôn lại một phần của bộ hôm nay
+    let fcSubsetKind = '';     // 'rest': chấm nốt, 'weak': ôn lại từ chưa nhớ
+
+    function activeFcMode() {
+      return document.querySelector('[data-action="fc-mode"].active')?.dataset.fcMode || '';
+    }
+
+    function isTodayFlow() {
+      return !selectedDay && activeFcMode() === 'today';
+    }
+
+    function nextCard() {
+      const atEnd = currentFcList.length > 0 && fcIndex === currentFcList.length - 1;
+      if (atEnd && (isTodayFlow() || fcSubsetRound)) {
+        showDone();
+        return;
+      }
+      if (atEnd && currentFcList.length > 1) toast('↺ Hết danh sách, quay lại thẻ đầu');
+      showCard(fcIndex + 1);
+    }
+
+    function doneButton(label, action, primary = false) {
+      return `<button type="button" class="${primary ? 'primary' : ''}" data-action="${action}">${escapeHTML(label)}</button>`;
+    }
+
+    function showDone() {
+      if (!apRunning) stopAllAudio();
+      const today = todayCards();
+      const { done, total } = todayProgress();
+      let emoji, title, text, actions;
+      if (!currentEmail) {
+        emoji = '👏';
+        title = 'Bạn đã xem hết bộ hôm nay';
+        text = `${total} từ hôm nay. Đăng nhập để chấm mức nhớ, lưu tiến độ và nhận nhắc từ trong ngày.`;
+        actions = doneButton('Đăng nhập / Tạo tài khoản', 'show-login', true) + doneButton('↺ Xem lại từ đầu', 'done-restart');
+      } else if (done < total) {
+        emoji = '📋';
+        title = 'Còn vài từ chưa chấm';
+        text = `Đã chấm ${done}/${total} từ của bộ hôm nay.`;
+        actions = doneButton(`Chấm nốt ${total - done} từ`, 'done-rate-rest', true) + doneButton('↺ Xem lại từ đầu', 'done-restart');
+      } else {
+        const weak = today.filter(c => c.level <= 2).length;
+        const review = rawVocab.filter(v => v.level < 4).length;
+        emoji = '🎉';
+        title = fcSubsetRound && fcSubsetKind === 'weak' ? 'Xong lượt ôn!' : 'Xong bộ hôm nay!';
+        text = `Đã chấm ${total}/${total} từ · 🔥 ${studyStreak} ngày học liên tiếp`
+          + (weak ? ` · còn ${weak} từ chưa nhớ` : ' · nhớ được hết rồi!');
+        actions = (weak ? doneButton(`🔁 Ôn lại ${weak} từ chưa nhớ`, 'done-weak', true) : '')
+          + (review ? doneButton(`📚 Ôn các từ cần ôn (${review})`, 'done-review', !weak) : '')
+          + doneButton('↺ Xem lại bộ hôm nay', 'done-restart');
+      }
+      document.getElementById('fc-done-emoji').textContent = emoji;
+      document.getElementById('fc-done-title').textContent = title;
+      document.getElementById('fc-done-text').textContent = text;
+      document.getElementById('fc-done-actions').innerHTML = actions;
+      document.getElementById('fc-done').classList.remove('hidden');
+      document.getElementById('flashcard').classList.add('hidden');
+      document.querySelector('.fc-nav').classList.add('hidden');
+      document.getElementById('fc-done').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+
+    function hideDone() {
+      document.getElementById('fc-done').classList.add('hidden');
+      document.getElementById('flashcard').classList.remove('hidden');
+      document.querySelector('.fc-nav').classList.remove('hidden');
+    }
+
+    // Học một phần của bộ hôm nay (từ chưa chấm, từ chưa nhớ); hết phần đó thì quay lại màn hoàn thành
+    function startSubset(cards, kind) {
+      if (!cards.length) return;
+      fcSubsetRound = true;
+      fcSubsetKind = kind;
+      currentFcList = cards;
+      showCard(0);
+    }
+
+    function handleDoneAction(action) {
+      if (action === 'done-rate-rest') {
+        startSubset(todayCards().filter(c => c.last_review !== todayVN()), 'rest');
+      } else if (action === 'done-weak') {
+        startSubset(todayCards().filter(c => c.level <= 2), 'weak');
+      } else if (action === 'done-review') {
+        clearSelectedDay();
+        setFcMode('review');
+        buildFlashcards();
+      } else {
+        buildFlashcards();
+      }
+    }
     function prevCard() { showCard(fcIndex - 1); }
 
     function setCardLevel(lv) {
@@ -5020,8 +5468,14 @@
         queueChange({ lang: currentLang, itemType: ITEM_VOCAB, content: vocabItem.word, level: lv });
       }
 
+      if (!studiedToday) {
+        studiedToday = true;
+        studyStreak += 1;
+        pulseStat('stat-streak');
+      }
       updateStats();
-      toast(`Đã lưu mức nhớ ${lv} ⭐`);
+      pulseStat('stat-today');
+      if (navigator.vibrate) navigator.vibrate(12);
       setTimeout(() => nextCard(), 320);
     }
 
@@ -5305,9 +5759,15 @@
       }
       // 2. Tải lại dữ liệu
       else if (action === 'refresh-sheet') {
+        announceNextLoad = true;
         loadSheetData({ fresh: true });
       }
       // 3. Chuyển chế độ Flashcard (Tất cả / Hôm nay / Cần ôn)
+      else if (action === 'toggle-fc-options') {
+        setFcOptionsOpen(!document.getElementById('fc-options').classList.contains('open'));
+      } else if (action.startsWith('done-')) {
+        handleDoneAction(action);
+      }
       else if (action === 'fc-mode') {
         clearSelectedDay();
         setFcMode(target.dataset.fcMode);
@@ -5488,9 +5948,9 @@
     document.getElementById('phrase-situation').addEventListener('change', renderPhraseGrid);
     document.getElementById('phrase-word-filter').addEventListener('change', renderPhraseGrid);
 
-    document.getElementById('fc-topic-filter').addEventListener('change', buildFlashcards);
-    document.getElementById('fc-day-filter').addEventListener('change', event => selectDay(event.target.value));
-    document.getElementById('fc-track-filter').addEventListener('change', event => selectTrack(event.target.value));
+    document.getElementById('fc-topic-filter').addEventListener('change', () => { setFcOptionsOpen(false); buildFlashcards(); });
+    document.getElementById('fc-day-filter').addEventListener('change', event => { setFcOptionsOpen(false); selectDay(event.target.value); });
+    document.getElementById('fc-track-filter').addEventListener('change', event => { setFcOptionsOpen(false); selectTrack(event.target.value); });
 
     // Phím tắt bàn phím
     document.addEventListener('keydown', e => {
@@ -5513,6 +5973,36 @@
         else if (e.key >= '1' && e.key <= '5' && fcRevealed) setCardLevel(parseInt(e.key, 10));
       }
     });
+
+    // Vuốt thẻ trái/phải để chuyển từ (điện thoại)
+    (() => {
+      const card = document.getElementById('flashcard');
+      const hint = document.getElementById('swipe-hint');
+      let startX = 0, startY = 0, startT = 0, tracking = false;
+      let hintDone = false;
+      try { hintDone = localStorage.getItem('henry_swipe_hint') === '1'; } catch (e) { }
+      if (!hintDone && window.matchMedia('(pointer: coarse)').matches) hint.classList.remove('hidden');
+      card.addEventListener('touchstart', e => {
+        if (e.touches.length !== 1) return;
+        tracking = true;
+        startX = e.touches[0].clientX;
+        startY = e.touches[0].clientY;
+        startT = Date.now();
+      }, { passive: true });
+      card.addEventListener('touchend', e => {
+        if (!tracking) return;
+        tracking = false;
+        const dx = e.changedTouches[0].clientX - startX;
+        const dy = e.changedTouches[0].clientY - startY;
+        if (Math.abs(dx) < 60 || Math.abs(dy) > 50 || Date.now() - startT > 700 || apRunning) return;
+        if (dx < 0) nextCard(); else prevCard();
+        if (!hintDone) {
+          hintDone = true;
+          hint.classList.add('hidden');
+          try { localStorage.setItem('henry_swipe_hint', '1'); } catch (err) { }
+        }
+      }, { passive: true });
+    })();
 
     // Toast thông báo
     let toastTimer;
