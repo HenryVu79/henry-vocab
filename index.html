@@ -1941,6 +1941,118 @@
       font-size: .75rem;
     }
 
+    .sendlog-days .admin-progress {
+      min-width: 0;
+    }
+
+    .sendlog-days .admin-progress th,
+    .sendlog-days .admin-progress td {
+      padding: 8px 7px;
+      white-space: nowrap;
+    }
+
+    @media (max-width: 600px) {
+      .sendlog-days .col-people {
+        display: none;
+      }
+    }
+
+    .sendlog-days tr[data-day] {
+      cursor: pointer;
+    }
+
+    .sendlog-days tr[data-day]:hover td {
+      background: #f8fafc;
+    }
+
+    .sendlog-days tr.selected td {
+      background: #eff6ff;
+      font-weight: 600;
+    }
+
+    .sendlog-days .over {
+      color: var(--danger);
+      font-weight: 700;
+    }
+
+    .sendlog-filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 14px 0 10px;
+    }
+
+    .sendlog-filters input,
+    .sendlog-filters select {
+      flex: 1 1 150px;
+      min-width: 0;
+      padding: 9px 10px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: #fff;
+      font-size: .88rem;
+    }
+
+    .sendlog-title {
+      margin: 0 0 8px;
+      color: var(--muted);
+      font-size: .85rem;
+    }
+
+    .sendlog-entry {
+      margin-bottom: 8px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border-left: 4px solid #16a34a;
+      background: #fff;
+      box-shadow: var(--shadow);
+      font-size: .86rem;
+    }
+
+    .sendlog-entry.failed { border-left-color: var(--danger); }
+    .sendlog-entry.skipped { border-left-color: #f59e0b; }
+
+    .sendlog-entry .head {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px 10px;
+      align-items: baseline;
+    }
+
+    .sendlog-entry .time {
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .sendlog-entry .who {
+      color: var(--muted);
+      font-size: .8rem;
+      word-break: break-all;
+    }
+
+    .sendlog-entry .detail {
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: .8rem;
+    }
+
+    .sendlog-entry details {
+      margin-top: 6px;
+    }
+
+    .sendlog-entry summary {
+      color: var(--primary, #2563eb);
+      font-size: .8rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .sendlog-entry ul {
+      margin: 6px 0 0;
+      padding-left: 18px;
+      font-size: .82rem;
+    }
+
     .admin-temp {
       margin-bottom: 12px;
       padding: 12px;
@@ -2584,8 +2696,9 @@
       <div class="admin-tabs" role="tablist">
         <button type="button" class="admin-tab active" data-action="admin-tab" data-tab="progress" role="tab">📊 Tiến độ học</button>
         <button type="button" class="admin-tab" data-action="admin-tab" data-tab="accounts" role="tab">👥 Tài khoản</button>
+        <button type="button" class="admin-tab" data-action="admin-tab" data-tab="sendlog" role="tab">📨 Lịch sử gửi</button>
       </div>
-      <div class="controls">
+      <div class="controls" id="admin-user-controls">
         <input type="text" id="admin-search" placeholder="🔍 Tìm theo tên hoặc email..." />
         <select id="admin-filter">
           <option value="">Tất cả</option>
@@ -2603,6 +2716,23 @@
           bấm mức nhớ. "Đã nhận" là số từ đã có trong các bộ từ gửi cho người đó; "Nhớ chắc" là mức 4–5, "Cần ôn" là mức 1–2.</div>
       </div>
       <div class="admin-list hidden" id="admin-list"></div>
+      <div class="hidden" id="admin-sendlog-section">
+        <div class="admin-progress-wrap sendlog-days"><table class="admin-progress" id="sendlog-days"></table></div>
+        <div class="admin-progress-note">30 ngày gần nhất. Bấm vào một ngày để xem chi tiết. 📧 Sáng = email bộ từ buổi sáng, ⏰ Nhắc = email nhắc,
+          🔔 Máy = thông báo trên máy (không tốn hạn mức), Gmail = số email đã dùng trong hạn mức khoảng 100/ngày, ⚠️ = số lần lỗi hoặc bỏ qua. Lịch sử giữ 90 ngày.</div>
+        <div class="sendlog-filters">
+          <input type="date" id="sendlog-day" aria-label="Ngày" />
+          <select id="sendlog-kind" aria-label="Loại">
+            <option value="">Tất cả loại</option>
+            <option value="daily">📧 Email bộ từ buổi sáng</option>
+            <option value="nudge_email">⏰ Email nhắc</option>
+            <option value="push">🔔 Thông báo trên máy</option>
+            <option value="failed">⚠️ Lỗi / bỏ qua</option>
+          </select>
+          <select id="sendlog-person" aria-label="Người nhận"><option value="">Mọi người</option></select>
+        </div>
+        <div id="sendlog-list"></div>
+      </div>
     </div>
   </div>
 
@@ -4157,6 +4287,7 @@
       setScreen('admin-screen');
       loadAdminSettings();
       await loadAdminUsers();
+      if (adminTab === 'sendlog') loadSendLog();
     }
 
     async function loadAdminSettings() {
@@ -4273,7 +4404,7 @@
         const [cls, label] = studyState(st);
         return `<tr>
           <td><span class="study-dot ${cls}" title="${label}"></span><b>${escapeHTML(u.displayName || u.email)}</b>
-            <div class="sub">${escapeHTML(u.languages || '–')}${u.status === 'Khóa' ? ' · bị khóa' : ''}${u.nudgeEmail ? ' · 📧 nhắc' : ''}${u.pushDevices ? ` · 🔔 ${u.pushDevices} máy` : ''}</div></td>
+            <div class="sub">${escapeHTML(u.languages || '–')}${u.status === 'Khóa' ? ' · bị khóa' : ''}${u.nudgeEmail ? ' · 📧 nhắc' : ''}${u.pushDevices ? ` · 🔔 ${u.pushDevices} máy` : ''}${sentTodayText(u.sentToday)}</div></td>
           <td class="num">${st.todayReviews || 0} <span class="sub">lượt</span></td>
           <td class="num">${st.activeDays7 || 0}/7 <span class="sub">ngày</span><div class="sub">${st.weekReviews || 0} lượt</div></td>
           <td class="num">${langCell(st, 'seen')}</td>
@@ -4287,6 +4418,14 @@
         <tbody>${rows || '<tr><td colspan="7" class="sub">Không có người học phù hợp</td></tr>'}</tbody>`;
     }
 
+    function sentTodayText(sent) {
+      if (!sent || !(sent.emails || sent.pushes || sent.failed)) return '';
+      const parts = [];
+      if (sent.emails) parts.push(`${sent.emails} email`);
+      if (sent.pushes) parts.push(`${sent.pushes} thông báo`);
+      return `<br>📨 Hôm nay đã nhận: ${parts.join(', ') || '0'}${sent.failed ? ` · ⚠️ ${sent.failed} lần lỗi/bỏ qua` : ''}`;
+    }
+
     function setAdminTab(tab) {
       adminTab = tab;
       document.querySelectorAll('.admin-tab').forEach(btn => {
@@ -4296,6 +4435,96 @@
       });
       document.getElementById('admin-progress-section').classList.toggle('hidden', tab !== 'progress');
       document.getElementById('admin-list').classList.toggle('hidden', tab !== 'accounts');
+      document.getElementById('admin-sendlog-section').classList.toggle('hidden', tab !== 'sendlog');
+      document.getElementById('admin-user-controls').classList.toggle('hidden', tab === 'sendlog');
+      if (tab === 'sendlog') loadSendLog();
+    }
+
+    // ─── LỊCH SỬ GỬI ───
+    const SEND_KINDS = { daily: '📧 Email bộ từ buổi sáng', nudge_email: '⏰ Email nhắc', push: '🔔 Thông báo trên máy' };
+    const SEND_STATUS = { sent: '✅ Đã gửi', failed: '❌ Lỗi', skipped: '⏸️ Bỏ qua' };
+    const LANG_FLAG = { en: '🇬🇧', zh: '🇨🇳' };
+    let sendLogSeq = 0;
+
+    function formatDayShort(day) {
+      const [y, m, d] = String(day).split('-');
+      return d && m ? `${d}/${m}${y !== String(new Date().getFullYear()) ? '/' + y : ''}` : day;
+    }
+
+    async function loadSendLog() {
+      const seq = ++sendLogSeq;
+      const list = document.getElementById('sendlog-list');
+      const day = document.getElementById('sendlog-day').value;
+      list.innerHTML = '<div class="empty">Đang tải lịch sử...</div>';
+      try {
+        const data = await api('adminSendLog', {
+          day,
+          kind: document.getElementById('sendlog-kind').value,
+          email: document.getElementById('sendlog-person').value
+        });
+        if (seq !== sendLogSeq) return;
+        document.getElementById('sendlog-day').value = data.day;
+        document.getElementById('sendlog-day').max = data.today;
+        renderSendLogPeople();
+        renderSendLogDays(data);
+        renderSendLogEntries(data);
+      } catch (err) {
+        if (seq !== sendLogSeq || handleSessionError(err)) return;
+        list.innerHTML = `<div class="empty">❌ ${escapeHTML(err.message)}</div>`;
+      }
+    }
+
+    function renderSendLogPeople() {
+      const select = document.getElementById('sendlog-person');
+      const current = select.value;
+      select.innerHTML = '<option value="">Mọi người</option>' + [...adminUsers]
+        .sort((a, b) => (a.displayName || a.email).localeCompare(b.displayName || b.email, 'vi'))
+        .map(u => `<option value="${escapeHTML(u.email)}">${escapeHTML(u.displayName || u.email)} – ${escapeHTML(u.email)}</option>`).join('');
+      select.value = current;
+    }
+
+    function renderSendLogDays(data) {
+      const rows = data.days.map(d => {
+        const emails = d.daily + d.nudgeEmail;
+        return `<tr data-day="${d.day}" class="${d.day === data.day ? 'selected' : ''}">
+          <td>${d.day === data.today ? 'Hôm nay' : formatDayShort(d.day)}</td>
+          <td class="num">${d.daily}</td>
+          <td class="num">${d.nudgeEmail}</td>
+          <td class="num">${d.push}</td>
+          <td class="num ${emails > 100 ? 'over' : ''}">${emails}/100</td>
+          <td class="num" title="${d.failed} lỗi, ${d.skipped} bỏ qua">${d.failed || d.skipped ? `${d.failed + d.skipped}` : '–'}</td>
+          <td class="num col-people">${d.people}</td>
+        </tr>`;
+      }).join('');
+      document.getElementById('sendlog-days').innerHTML = `
+        <thead><tr><th>Ngày</th><th title="Email bộ từ buổi sáng">📧 Sáng</th><th title="Email nhắc">⏰ Nhắc</th><th title="Thông báo trên máy">🔔 Máy</th><th title="Email đã dùng / hạn mức Gmail">Gmail</th><th title="Lỗi / bỏ qua">⚠️ Lỗi</th><th class="col-people" title="Số người nhận">Người</th></tr></thead>
+        <tbody>${rows || '<tr><td colspan="7" class="sub">Chưa gửi gì trong 30 ngày qua</td></tr>'}</tbody>`;
+    }
+
+    function renderSendLogEntries(data) {
+      const list = document.getElementById('sendlog-list');
+      const dayLabel = data.day === data.today ? 'hôm nay' : 'ngày ' + formatDayShort(data.day);
+      if (!data.entries.length) {
+        list.innerHTML = `<div class="empty">Không có lần gửi nào ${dayLabel} phù hợp bộ lọc</div>`;
+        return;
+      }
+      const title = `<p class="sendlog-title">${data.entries.length}${data.more ? '+ (chỉ hiện 500 lần gần nhất)' : ''} lần gửi ${dayLabel}, mới nhất ở trên</p>`;
+      list.innerHTML = title + data.entries.map(e => {
+        const items = e.items || [];
+        const multi = new Set(items.map(i => i.lang)).size > 1;
+        const words = items.length ? `<details><summary>${items.length} từ đã gửi</summary><ul>${items.map(i =>
+          `<li>${multi ? (LANG_FLAG[i.lang] || '') + ' ' : ''}<b>${escapeHTML(i.word)}</b> – ${escapeHTML(i.meaning)}</li>`).join('')}</ul></details>` : '';
+        return `<div class="sendlog-entry ${e.status}">
+          <div class="head">
+            <span class="time">${escapeHTML(e.at)}</span>
+            <span>${SEND_KINDS[e.kind] || escapeHTML(e.kind)}</span>
+            <span>${SEND_STATUS[e.status] || escapeHTML(e.status)}</span>
+          </div>
+          <div><b>${escapeHTML(e.name || e.email)}</b> <span class="who">${escapeHTML(e.email)}</span></div>
+          ${e.detail ? `<div class="detail">${escapeHTML(e.detail)}</div>` : ''}
+          ${words}
+        </div>`;
+      }).join('');
     }
 
     function adminButton(label, action, email, value = '', extraClass = '') {
@@ -6061,6 +6290,7 @@
       } else if (action === 'admin-refresh') {
         loadAdminSettings();
         loadAdminUsers();
+        if (adminTab === 'sendlog') loadSendLog();
       } else if (action === 'admin-email') {
         adminSetEmail(target.dataset.email, target.dataset.value);
       } else if (action === 'admin-status') {
@@ -6090,6 +6320,13 @@
     document.getElementById('admin-search').addEventListener('input', renderAdmin);
     document.getElementById('admin-settings').addEventListener('submit', saveAdminSettings);
     document.getElementById('admin-filter').addEventListener('change', renderAdmin);
+    ['sendlog-day', 'sendlog-kind', 'sendlog-person'].forEach(id => document.getElementById(id).addEventListener('change', loadSendLog));
+    document.getElementById('sendlog-days').addEventListener('click', event => {
+      const row = event.target.closest('tr[data-day]');
+      if (!row) return;
+      document.getElementById('sendlog-day').value = row.dataset.day;
+      loadSendLog();
+    });
 
     // Lọc theo cột "Từ vựng liên quan" để số câu khớp với badge trên thẻ từ vựng
     function filterPhrasesByWord(word) {
