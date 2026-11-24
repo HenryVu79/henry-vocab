@@ -1571,6 +1571,8 @@
       display: flex;
       flex-direction: column;
       gap: 10px;
+      /* fieldset mặc định không co hẹp hơn nội dung: phải cho phép co để không tràn ngang */
+      min-width: 0;
       margin: 0;
       padding: 12px;
       border: 1px solid var(--border);
@@ -1583,14 +1585,63 @@
       font-size: .9rem;
     }
 
-    .pf-hours {
+    .pf-shifts {
       display: flex;
-      gap: 10px;
+      flex-direction: column;
+      gap: 6px;
     }
 
-    .pf-hours label {
-      flex: 1;
+    .pf-shift-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 4px;
+      font-size: .82rem;
+      font-weight: 600;
+      color: var(--muted);
+    }
+
+    .pf-shift-times {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .pf-shift-times input {
+      flex: 1 1 0;
+      width: 0;
       min-width: 0;
+      padding: 9px 6px 9px 10px;
+      font-size: .95rem;
+    }
+
+    .pf-shift-times input::-webkit-calendar-picker-indicator {
+      margin-left: 2px;
+      padding: 0;
+      width: 14px;
+      height: 14px;
+    }
+
+    .pf-shift-remove {
+      padding: 2px 8px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #fff;
+      color: var(--danger);
+      font-size: .75rem;
+      cursor: pointer;
+    }
+
+    .pf-add-shift {
+      align-self: flex-start;
+      padding: 7px 12px;
+      border: 1px dashed var(--primary, #2563eb);
+      border-radius: 8px;
+      background: #eff6ff;
+      color: var(--primary, #2563eb);
+      font-size: .82rem;
+      font-weight: 600;
+      cursor: pointer;
     }
 
     .pf-days {
@@ -2604,14 +2655,10 @@
         </label>
         <fieldset class="pf-group">
           <legend>🔔 Giờ làm việc &amp; nhắc từ trong ngày</legend>
-          <div class="pf-hours">
-            <label>Giờ làm từ
-              <input type="time" id="pf-work-start" value="08:00" required />
-            </label>
-            <label>đến
-              <input type="time" id="pf-work-end" value="17:00" required />
-            </label>
-          </div>
+          <div class="pf-shifts" id="pf-shifts" aria-label="Ca làm việc"></div>
+          <button type="button" class="pf-add-shift" id="pf-add-shift">＋ Thêm ca làm việc</button>
+          <div class="pf-note">Làm ca gãy (ví dụ sáng 8:00–12:00, chiều 13:30–17:30) thì thêm ca thứ hai, tối đa 4 ca.
+            Giờ nghỉ giữa các ca tính là ngoài giờ làm.</div>
           <fieldset class="pf-days" id="pf-work-days">
             <legend>Ngày làm việc</legend>
             <label class="pf-day"><input type="checkbox" value="1" checked /><span>T2</span></label>
@@ -3848,7 +3895,7 @@
     function startLearning(preloaded) {
       needsRelogin = false;
       renderUserChip();
-      refreshPushState();
+      refreshPushState().then(() => setTimeout(maybePromptPush, 1500));
       setScreen(null);
       updateSyncStatusUI();
 
@@ -3948,8 +3995,7 @@
       document.getElementById('pf-languages').value = data.languages || 'Anh';
       document.getElementById('pf-level').value = data.level || '';
       document.getElementById('pf-goal').value = data.goal || '';
-      document.getElementById('pf-work-start').value = data.workStart || '08:00';
-      document.getElementById('pf-work-end').value = data.workEnd || '17:00';
+      renderShiftRows(profileShifts(data));
       const workDays = data.workDays || [1, 2, 3, 4, 5];
       document.querySelectorAll('#pf-work-days input').forEach(box => { box.checked = workDays.includes(Number(box.value)); });
       document.getElementById('pf-nudge-email').checked = Boolean(data.nudgeEmail);
@@ -3975,13 +4021,13 @@
         level: document.getElementById('pf-level').value.trim(),
         goal: document.getElementById('pf-goal').value.trim(),
         workHours: isRegister ? '' : (userProfile.workHours || ''),
-        workStart: document.getElementById('pf-work-start').value,
-        workEnd: document.getElementById('pf-work-end').value,
+        workShifts: readShiftRows(),
         workDays: [...document.querySelectorAll('#pf-work-days input:checked')].map(box => Number(box.value)),
         nudgeEmail: document.getElementById('pf-nudge-email').checked
       };
-      if (!payload.workStart || !payload.workEnd || payload.workStart >= payload.workEnd) {
-        showFormError('profile-error', 'Giờ bắt đầu làm việc phải trước giờ kết thúc.');
+      const shiftError = checkShifts(payload.workShifts);
+      if (shiftError) {
+        showFormError('profile-error', shiftError);
         return;
       }
 
@@ -3996,8 +4042,8 @@
         const changes = Object.keys(labels)
           .filter(key => (userProfile[key] || '') !== payload[key])
           .map(key => [labels[key], userProfile[key] || '', payload[key]]);
-        const oldHours = `${userProfile.workStart || '08:00'}–${userProfile.workEnd || '17:00'}`;
-        const newHours = `${payload.workStart}–${payload.workEnd}`;
+        const oldHours = shiftsText(profileShifts(userProfile));
+        const newHours = shiftsText(payload.workShifts);
         if (oldHours !== newHours) changes.push(['Giờ làm việc', oldHours, newHours]);
         const oldDays = workDaysText(userProfile.workDays || [1, 2, 3, 4, 5]), newDays = workDaysText(payload.workDays);
         if (oldDays !== newDays) changes.push(['Ngày làm việc', oldDays, newDays]);
@@ -4100,6 +4146,79 @@
     }
 
     const DAY_NAMES = { 1: 'T2', 2: 'T3', 3: 'T4', 4: 'T5', 5: 'T6', 6: 'T7', 7: 'CN' };
+    // ─── CA LÀM VIỆC (có thể làm ca gãy: nhiều ca trong ngày) ───
+    const MAX_SHIFTS = 4;
+
+    function profileShifts(data) {
+      if (Array.isArray(data?.workShifts) && data.workShifts.length) return data.workShifts;
+      return [{ start: data?.workStart || '08:00', end: data?.workEnd || '17:00' }];
+    }
+
+    function shiftsText(shifts) {
+      return [...shifts].sort((a, b) => a.start.localeCompare(b.start)).map(x => `${x.start}–${x.end}`).join(', ');
+    }
+
+    function renderShiftRows(shifts) {
+      const box = document.getElementById('pf-shifts');
+      box.innerHTML = shifts.map((x, i) => `
+        <div class="pf-shift">
+          <div class="pf-shift-head">
+            <span>Ca ${i + 1}</span>
+            ${shifts.length > 1 ? `<button type="button" class="pf-shift-remove" data-shift="${i}" aria-label="Xóa ca ${i + 1}">✕ Xóa ca</button>` : ''}
+          </div>
+          <div class="pf-shift-times">
+            <input type="time" class="shift-start" value="${escapeHTML(x.start)}" required aria-label="Ca ${i + 1} bắt đầu" />
+            <span aria-hidden="true">–</span>
+            <input type="time" class="shift-end" value="${escapeHTML(x.end)}" required aria-label="Ca ${i + 1} kết thúc" />
+          </div>
+        </div>`).join('');
+      document.getElementById('pf-add-shift').classList.toggle('hidden', shifts.length >= MAX_SHIFTS);
+    }
+
+    function readShiftRows() {
+      return [...document.querySelectorAll('#pf-shifts .pf-shift')].map(row => ({
+        start: row.querySelector('.shift-start').value,
+        end: row.querySelector('.shift-end').value
+      })).sort((a, b) => a.start.localeCompare(b.start));
+    }
+
+    function checkShifts(shifts) {
+      if (!shifts.length) return 'Cần ít nhất một ca làm việc.';
+      if (shifts.some(x => !x.start || !x.end)) return 'Hãy nhập đủ giờ bắt đầu và kết thúc của từng ca.';
+      if (shifts.some(x => x.start >= x.end)) return 'Mỗi ca: giờ bắt đầu phải trước giờ kết thúc.';
+      for (let i = 1; i < shifts.length; i++) {
+        if (shifts[i].start < shifts[i - 1].end) return `Ca ${shifts[i - 1].start}–${shifts[i - 1].end} và ca ${shifts[i].start}–${shifts[i].end} bị chồng giờ nhau.`;
+      }
+      return '';
+    }
+
+    function minutesToTime(m) {
+      return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+    }
+
+    function addShiftRow() {
+      const rows = readShiftRows();
+      if (rows.length >= MAX_SHIFTS) return;
+      // Gợi ý ca mới: sau ca cuối 1 tiếng, dài 4 tiếng
+      const lastEnd = rows.length ? rows[rows.length - 1].end : '07:00';
+      const [h, m] = (lastEnd || '07:00').split(':').map(Number);
+      const start = Math.min(h * 60 + m + 60, 22 * 60);
+      const end = Math.min(start + 240, 23 * 60 + 59);
+      renderShiftRows([...rows, { start: minutesToTime(start), end: minutesToTime(end) }]);
+      document.querySelector('#pf-shifts .pf-shift:last-child .shift-start').focus();
+    }
+
+    document.getElementById('pf-add-shift').addEventListener('click', addShiftRow);
+    document.getElementById('pf-shifts').addEventListener('click', event => {
+      const button = event.target.closest('.pf-shift-remove');
+      if (!button) return;
+      const rows = [...document.querySelectorAll('#pf-shifts .pf-shift')].map(row => ({
+        start: row.querySelector('.shift-start').value, end: row.querySelector('.shift-end').value
+      }));
+      rows.splice(Number(button.dataset.shift), 1);
+      renderShiftRows(rows);
+    });
+
     function workDaysText(days) {
       return days.length ? [...days].sort().map(d => DAY_NAMES[d]).join(', ') : 'không có ngày làm';
     }
@@ -4187,10 +4306,17 @@
 
       const ok = await confirmAction({
         title: 'Bật thông báo nhắc từ trên máy này?',
-        message: 'Máy này sẽ nhận thông báo vài từ trong bộ hôm nay: trong giờ làm 90 phút/lần, ngoài giờ làm 60 phút/lần, không nhắc từ 22:30 đến 7:30. Giờ làm việc chỉnh trong Hồ sơ. Trình duyệt sẽ hỏi bạn cho phép hiện thông báo.',
+        message: PUSH_MESSAGE,
         ok: 'Bật thông báo'
       });
       if (!ok) return;
+      await enablePush();
+    }
+
+    const PUSH_MESSAGE = 'Máy này sẽ nhận thông báo vài từ trong bộ hôm nay: trong giờ làm 90 phút/lần, ngoài giờ làm 60 phút/lần, không nhắc từ 22:30 đến 7:30. Giờ làm việc chỉnh trong Hồ sơ. Trình duyệt sẽ hỏi bạn cho phép hiện thông báo.';
+
+    // Phải gọi ngay sau khi người dùng bấm (Safari chỉ cho hỏi quyền trong thao tác bấm)
+    async function enablePush() {
       try {
         // Phải hỏi quyền ngay sau thao tác bấm (Safari yêu cầu)
         const permission = await Notification.requestPermission();
@@ -4224,6 +4350,60 @@
       renderPushStatus();
     }
 
+    // Vào app mà máy này chưa bật thông báo: hỏi một lần. "Để sau" thì 3 ngày sau hỏi lại;
+    // tích "Không hỏi lại" thì không hỏi nữa trên máy này (vẫn bật được ở menu tài khoản).
+    const PUSH_ASK_AGAIN_MS = 3 * 86400000;
+    let pushPromptShownFor = null;
+
+    function pushPromptKey() {
+      return `henry_push_prompt_${currentEmail}`;
+    }
+
+    function pushPromptSnoozed() {
+      try {
+        const saved = JSON.parse(localStorage.getItem(pushPromptKey()) || 'null');
+        return Boolean(saved && (saved.never || Date.now() - saved.at < PUSH_ASK_AGAIN_MS));
+      } catch (e) { return false; }
+    }
+
+    function snoozePushPrompt(never) {
+      try { localStorage.setItem(pushPromptKey(), JSON.stringify({ at: Date.now(), never })); } catch (e) { }
+    }
+
+    function appIsIdle() {
+      return currentEmail && !needsRelogin && !isConfirmOpen()
+        && !document.querySelector('.auth-screen:not(.hidden)');
+    }
+
+    async function maybePromptPush() {
+      if (pushPromptShownFor === currentEmail || !appIsIdle() || pushPromptSnoozed() || !userProfile?.pushKey) return;
+      const iosNeedsHomeScreen = IS_IOS && !PUSH_SUPPORTED;
+      if (!iosNeedsHomeScreen && (!PUSH_SUPPORTED || pushSubscription || Notification.permission === 'denied')) return;
+      pushPromptShownFor = currentEmail;
+      if (iosNeedsHomeScreen) {
+        // iPhone/iPad chỉ nhận thông báo khi mở app từ màn hình chính
+        await confirmAction({
+          title: '🔔 Nhận thông báo nhắc từ trên iPhone',
+          message: 'Bấm nút Chia sẻ của Safari → "Thêm vào MH chính", rồi mở Henry Vocab từ biểu tượng đó và bật thông báo ở menu tài khoản.',
+          ok: 'Đã hiểu', cancel: 'Để sau', option: 'Không nhắc lại trên máy này'
+        });
+        snoozePushPrompt(confirmLastOption);
+        return;
+      }
+      const answer = await confirmAction({
+        title: '🔔 Bật thông báo nhắc từ?',
+        message: PUSH_MESSAGE,
+        ok: 'Bật thông báo', cancel: 'Để sau', option: 'Không hỏi lại trên máy này'
+      });
+      if (!answer) {
+        snoozePushPrompt(confirmLastOption);
+        if (confirmLastOption) toast('Có thể bật thông báo bất cứ lúc nào ở menu tài khoản');
+        return;
+      }
+      await enablePush();
+      if (!pushSubscription) snoozePushPrompt(false);
+    }
+
     // Đăng xuất: máy này không nhận thông báo của tài khoản vừa thoát nữa
     function dropPushOnSignOut() {
       const sub = pushSubscription;
@@ -4239,8 +4419,10 @@
     let confirmResolve = null;
 
     // Trả về null nếu bấm Hủy, hoặc { option } nếu đồng ý (option là ô tích thêm, nếu có)
-    function confirmAction({ title, message = '', changes = [], ok = 'Đồng ý', danger = false, option = '' }) {
+    let confirmLastOption = false;
+    function confirmAction({ title, message = '', changes = [], ok = 'Đồng ý', danger = false, option = '', cancel = 'Hủy' }) {
       if (confirmResolve) finishConfirm(false);
+      document.getElementById('confirm-cancel').textContent = cancel;
       document.getElementById('confirm-title').textContent = title;
       document.getElementById('confirm-message').textContent = message;
       document.getElementById('confirm-changes').innerHTML = changes.map(([label, from, to]) =>
@@ -4260,6 +4442,7 @@
       document.getElementById('confirm-dialog').classList.add('hidden');
       const resolve = confirmResolve;
       confirmResolve = null;
+      confirmLastOption = document.getElementById('confirm-option-input').checked;
       if (resolve) resolve(accepted ? { option: document.getElementById('confirm-option-input').checked } : null);
     }
 
@@ -4537,14 +4720,18 @@
       const emailButtons = u.emailStatus === 'Chờ duyệt'
         ? adminButton('✅ Duyệt email', 'admin-email', u.email, 'Đã duyệt', 'primary') + adminButton('Từ chối', 'admin-email', u.email, 'Từ chối')
         : u.emailStatus === 'Đã duyệt'
-          ? adminButton('Dừng gửi email', 'admin-email', u.email, 'Từ chối')
-          : adminButton('Duyệt gửi email', 'admin-email', u.email, 'Đã duyệt');
+          ? adminButton('Dừng gửi email bộ từ', 'admin-email', u.email, 'Từ chối')
+          : adminButton('📧 Bật email bộ từ', 'admin-email', u.email, 'Đã duyệt');
 
       const accountButtons = isSelf ? '' : [
         adminButton(u.hasPassword ? 'Đặt lại mật khẩu' : 'Cấp mật khẩu', 'admin-reset', u.email),
         adminButton(isLocked ? 'Mở khóa' : 'Khóa', 'admin-status', u.email, isLocked ? 'Hoạt động' : 'Khóa', isLocked ? '' : 'danger'),
         adminButton(u.role === 'Quản trị' ? 'Bỏ quyền quản trị' : 'Cấp quyền quản trị', 'admin-role', u.email, u.role === 'Quản trị' ? 'Học viên' : 'Quản trị')
       ].join('');
+
+      const nudgeButton = u.nudgeEmail
+        ? adminButton('Tắt email nhắc', 'admin-nudge', u.email, 'off')
+        : adminButton('⏰ Bật email nhắc', 'admin-nudge', u.email, 'on');
 
       return `
       <div class="admin-card">
@@ -4564,10 +4751,10 @@
           <span>Email: <b>${escapeHTML(u.emailStatus || 'Chưa đăng ký')}</b></span>
           <span>Tiến độ EN: ${u.progress.en.mastered}/${u.progress.en.total} từ nhớ chắc · ZH: ${u.progress.zh.mastered}/${u.progress.zh.total} · Học gần nhất: ${lastStudyText(u.study)}</span>
           <span>Đăng ký: ${escapeHTML(u.registeredAt || '–')} · Đăng nhập gần nhất: ${escapeHTML(u.lastLogin || 'chưa có')}</span>
-          <span>Giờ làm: ${escapeHTML(u.workStart || '08:00')}–${escapeHTML(u.workEnd || '17:00')} (${escapeHTML(workDaysText(u.workDays || [1, 2, 3, 4, 5]))}) · Email nhắc: ${u.nudgeEmail ? 'bật' : 'tắt'} · Thông báo: ${u.pushDevices || 0} máy${u.lastNudge ? ` · Nhắc gần nhất: ${escapeHTML(u.lastNudge)}` : ''}</span>
+          <span>Giờ làm: ${escapeHTML(shiftsText(profileShifts(u)))} (${escapeHTML(workDaysText(u.workDays || [1, 2, 3, 4, 5]))}) · Email nhắc: ${u.nudgeEmail ? 'bật' : 'tắt'} · Thông báo: ${u.pushDevices || 0} máy${u.lastNudge ? ` · Nhắc gần nhất: ${escapeHTML(u.lastNudge)}` : ''}</span>
           ${u.goal ? `<span>Mục tiêu: ${escapeHTML(u.goal)}</span>` : ''}
         </div>
-        <div class="admin-actions">${emailButtons}${accountButtons}</div>
+        <div class="admin-actions">${emailButtons}${nudgeButton}${accountButtons}</div>
       </div>
     `;
     }
@@ -4576,7 +4763,8 @@
     function estimateNudgeEmails(u) {
       const toMin = t => { const [h, m] = (t || '00:00').split(':').map(Number); return h * 60 + m; };
       const awakeStart = 7 * 60 + 30, awakeEnd = 22 * 60 + 30;
-      const work = Math.max(0, Math.min(toMin(u.workEnd || '17:00'), awakeEnd) - Math.max(toMin(u.workStart || '08:00'), awakeStart));
+      const work = profileShifts(u).reduce((sum, x) =>
+        sum + Math.max(0, Math.min(toMin(x.end), awakeEnd) - Math.max(toMin(x.start), awakeStart)), 0);
       return Math.ceil(work / 90) + Math.ceil((awakeEnd - awakeStart - work) / 60);
     }
 
@@ -4640,6 +4828,28 @@
       });
       if (!ok) return;
       runAdminAction('adminSetEmailStatus', { email, status }, `✅ Đã cập nhật email: ${status}`);
+    }
+
+    // Bật email nhắc thay người học (nhiều người không biết tự bật). Email nhắc chỉ gửi tới địa chỉ đã duyệt.
+    async function adminSetNudge(email, on) {
+      const u = adminUsers.find(x => x.email === email);
+      const changes = [['Email nhắc trong ngày', u?.nudgeEmail ? 'Bật' : 'Tắt', on ? 'Bật' : 'Tắt']];
+      let message = adminUserLabel(email);
+      if (on) {
+        if (u?.emailStatus !== 'Đã duyệt') changes.push(['Email bộ từ buổi sáng', u?.emailStatus || 'Chưa đăng ký', 'Đã duyệt']);
+        const perDay = estimateNudgeEmails(u || {});
+        const daily = adminUsers.filter(x => x.emailStatus === 'Đã duyệt' && x.status !== 'Khóa').length + (u?.emailStatus === 'Đã duyệt' ? 0 : 1);
+        const nudges = adminUsers.filter(x => x.nudgeEmail && x.emailStatus === 'Đã duyệt' && x.status !== 'Khóa')
+          .reduce((sum, x) => sum + estimateNudgeEmails(x), 0) + perDay;
+        message += ` sẽ nhận khoảng ${perDay} email nhắc mỗi ngày làm việc (theo giờ làm của người đó). Sau khi bật, tổng ước tính ≈ ${daily + nudges}/100 email Gmail mỗi ngày`
+          + (daily + nudges > 100 ? ' – VƯỢT hạn mức: một số email nhắc sẽ không gửi được.' : '.')
+          + (u?.emailStatus !== 'Đã duyệt' ? ' Email bộ từ buổi sáng cũng được duyệt luôn.' : '');
+      } else {
+        message += ' sẽ không nhận email nhắc trong ngày nữa. Email bộ từ buổi sáng và thông báo trên máy không đổi.';
+      }
+      const ok = await confirmAction({ title: on ? 'Bật email nhắc cho người này?' : 'Tắt email nhắc?', message, changes, ok: on ? 'Bật' : 'Tắt', danger: !on });
+      if (!ok) return;
+      runAdminAction('adminSetNudgeEmail', { email, on }, on ? '✅ Đã bật email nhắc' : '✅ Đã tắt email nhắc');
     }
 
     async function adminSetStatus(email, status) {
@@ -6291,6 +6501,8 @@
         loadAdminSettings();
         loadAdminUsers();
         if (adminTab === 'sendlog') loadSendLog();
+      } else if (action === 'admin-nudge') {
+        adminSetNudge(target.dataset.email, target.dataset.value === 'on');
       } else if (action === 'admin-email') {
         adminSetEmail(target.dataset.email, target.dataset.value);
       } else if (action === 'admin-status') {
