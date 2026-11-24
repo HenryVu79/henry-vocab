@@ -1747,6 +1747,21 @@
       padding: 0;
       list-style: none;
       font-size: .85rem;
+      max-height: 55vh;
+      overflow-y: auto;
+    }
+
+    /* Quản trị chỉnh giờ làm: hộp hồ sơ nằm trên trang Quản trị */
+    .auth-screen.over-admin {
+      z-index: 110;
+    }
+
+    .pf-changed {
+      margin: 0 0 8px;
+      padding: 6px 8px;
+      border-radius: 8px;
+      background: #fef9c3;
+      color: #713f12;
     }
 
     .confirm-changes li {
@@ -2630,17 +2645,17 @@
           <input type="password" id="pf-password-confirm" required minlength="8" maxlength="128"
             autocomplete="new-password" />
         </label>
-        <label>Tên hiển thị
+        <label class="self-only">Tên hiển thị
           <input type="text" id="pf-display-name" required maxlength="40" autocomplete="name" />
         </label>
-        <label>Ngôn ngữ học
+        <label class="self-only">Ngôn ngữ học
           <select id="pf-languages">
             <option value="Anh">Anh</option>
             <option value="Trung">Trung</option>
             <option value="Cả hai">Cả hai</option>
           </select>
         </label>
-        <label>Trình độ
+        <label class="self-only">Trình độ
           <input type="text" id="pf-level" list="pf-level-options" maxlength="200" placeholder="Ví dụ: Mới bắt đầu" />
           <datalist id="pf-level-options">
             <option value="Mới bắt đầu"></option>
@@ -2650,11 +2665,12 @@
             <option value="HSK 3–4"></option>
           </datalist>
         </label>
-        <label>Mục tiêu
+        <label class="self-only">Mục tiêu
           <textarea id="pf-goal" rows="2" maxlength="200"></textarea>
         </label>
         <fieldset class="pf-group">
           <legend>🔔 Giờ làm việc &amp; nhắc từ trong ngày</legend>
+          <div class="pf-note pf-changed hidden" id="pf-changed-note"></div>
           <div class="pf-shifts" id="pf-shifts" aria-label="Ca làm việc"></div>
           <button type="button" class="pf-add-shift" id="pf-add-shift">＋ Thêm ca làm việc</button>
           <div class="pf-note">Làm ca gãy (ví dụ sáng 8:00–12:00, chiều 13:30–17:30) thì thêm ca thứ hai, tối đa 4 ca.
@@ -2669,11 +2685,11 @@
             <label class="pf-day"><input type="checkbox" value="6" /><span>T7</span></label>
             <label class="pf-day"><input type="checkbox" value="7" /><span>CN</span></label>
           </fieldset>
-          <label class="check-row">
+          <label class="check-row self-only">
             <input type="checkbox" id="pf-nudge-email" />
             <span>Nhận email nhắc từ trong ngày</span>
           </label>
-          <div class="pf-note" id="pf-nudge-note">Mỗi lần nhắc vài từ trong bộ hôm nay: trong giờ làm 90 phút/lần; ngoài giờ làm
+          <div class="pf-note self-only" id="pf-nudge-note">Mỗi lần nhắc vài từ trong bộ hôm nay: trong giờ làm 90 phút/lần; ngoài giờ làm
             và ngày nghỉ 60 phút/lần; không nhắc từ 22:30 đến 7:30. Email nhắc chỉ gửi khi email của bạn đã được duyệt.
             Thông báo trên điện thoại/máy tính: bật ở menu tài khoản.</div>
         </fieldset>
@@ -3721,7 +3737,7 @@
         if (passwordFormForced) signOut();
         else setScreen(null);
       } else if (open.id === 'profile-screen' && profileFormMode !== 'register') {
-        setScreen(null);
+        closeProfileForm();
       } else {
         continueAsGuest();
       }
@@ -3973,13 +3989,27 @@
     let profileFormMode = 'register';
     let passwordFormForced = false;
 
+    // mode: 'register' (đăng ký), 'profile' (tự sửa hồ sơ), 'admin' (quản trị chỉnh giờ làm của data.email)
+    let adminScheduleTarget = null;
+
     function showProfileForm(mode, data = {}) {
       profileFormMode = mode;
       const isRegister = mode === 'register';
+      const isAdmin = mode === 'admin';
+      adminScheduleTarget = isAdmin ? data : null;
 
-      document.getElementById('profile-title').textContent = isRegister ? 'Tạo tài khoản' : 'Hồ sơ của tôi';
-      document.getElementById('profile-intro').textContent = isRegister ? 'Tài khoản miễn phí, dùng để lưu mức nhớ và tiến độ học của riêng bạn.' : data.email;
-      document.getElementById('profile-submit').textContent = isRegister ? 'Bắt đầu học' : 'Lưu thay đổi';
+      document.getElementById('profile-title').textContent = isRegister ? 'Tạo tài khoản' : isAdmin ? 'Chỉnh giờ làm việc' : 'Hồ sơ của tôi';
+      document.getElementById('profile-intro').textContent = isRegister ? 'Tài khoản miễn phí, dùng để lưu mức nhớ và tiến độ học của riêng bạn.'
+        : isAdmin ? `${data.displayName || data.email} – ${data.email}` : data.email;
+      document.getElementById('profile-submit').textContent = isRegister ? 'Bắt đầu học' : isAdmin ? 'Lưu giờ làm' : 'Lưu thay đổi';
+      document.querySelectorAll('.self-only').forEach(row => {
+        row.classList.toggle('hidden', isAdmin);
+        row.querySelectorAll('input, select, textarea').forEach(input => { input.disabled = isAdmin; });
+      });
+      const changedNote = document.getElementById('pf-changed-note');
+      const changedText = isRegister ? '' : scheduleChangeNote(data, isAdmin);
+      changedNote.textContent = changedText;
+      changedNote.classList.toggle('hidden', !changedText);
       document.getElementById('profile-cancel').textContent = isRegister ? 'Đã có tài khoản? Đăng nhập' : 'Hủy';
 
       // Trường bị disabled không chặn việc gửi form dù có required
@@ -4001,7 +4031,37 @@
       document.getElementById('pf-nudge-email').checked = Boolean(data.nudgeEmail);
       document.getElementById('profile-error').classList.add('hidden');
 
-      setScreen('profile-screen');
+      const screen = document.getElementById('profile-screen');
+      screen.classList.toggle('over-admin', isAdmin);
+      if (isAdmin) screen.classList.remove('hidden');   // mở chồng lên trang Quản trị, đóng lại vẫn ở chỗ cũ
+      else setScreen('profile-screen');
+      screen.scrollTop = 0;
+    }
+
+    function closeProfileForm() {
+      const screen = document.getElementById('profile-screen');
+      if (screen.classList.contains('over-admin')) {
+        screen.classList.add('hidden');
+        screen.classList.remove('over-admin');
+        adminScheduleTarget = null;
+      } else {
+        setScreen(null);
+      }
+    }
+
+    // Ai chỉnh giờ làm gần nhất (mọi lần chỉnh đều ghi lịch sử)
+    function scheduleChangeWho(by, byName, ownerEmail) {
+      if (!by) return 'sửa trực tiếp trên Supabase';
+      if (by === ownerEmail) return 'người học tự chỉnh';
+      return `${byName || by} (quản trị)`;
+    }
+
+    function scheduleChangeNote(data, forAdmin) {
+      const c = data.scheduleChange;
+      if (!c) return '';
+      if (forAdmin) return `🕘 Chỉnh gần nhất: ${c.at} – ${scheduleChangeWho(c.by, c.byName, data.email)}. Lần lưu này cũng được ghi vào lịch sử.`;
+      if (c.self) return '';
+      return `ℹ️ Giờ làm của bạn được ${c.by ? (c.byName || c.by) + ' (quản trị)' : 'quản trị viên'} chỉnh lúc ${c.at}.`;
     }
 
     function showFormError(id, message) {
@@ -4028,6 +4088,10 @@
       const shiftError = checkShifts(payload.workShifts);
       if (shiftError) {
         showFormError('profile-error', shiftError);
+        return;
+      }
+      if (profileFormMode === 'admin') {
+        await saveAdminSchedule(payload.workShifts, payload.workDays);
         return;
       }
 
@@ -4095,6 +4159,76 @@
       } finally {
         submit.disabled = false;
       }
+    }
+
+    // Quản trị lưu giờ làm cho người khác
+    async function saveAdminSchedule(workShifts, workDays) {
+      const u = adminScheduleTarget;
+      if (!u) return;
+      const changes = [];
+      const oldHours = shiftsText(profileShifts(u)), newHours = shiftsText(workShifts);
+      if (oldHours !== newHours) changes.push(['Giờ làm việc', oldHours, newHours]);
+      const oldDays = workDaysText(u.workDays || [1, 2, 3, 4, 5]), newDays = workDaysText(workDays);
+      if (oldDays !== newDays) changes.push(['Ngày làm việc', oldDays, newDays]);
+      if (!changes.length) {
+        closeProfileForm();
+        toast('Không có thay đổi nào');
+        return;
+      }
+      if (!(await confirmAction({
+        title: 'Lưu giờ làm cho người này?',
+        message: `${adminUserLabel(u.email)}. Nhắc từ trong ngày sẽ theo giờ mới. Lần chỉnh này được ghi vào lịch sử, kèm tên bạn.`,
+        changes, ok: 'Lưu'
+      }))) return;
+      const submit = document.getElementById('profile-submit');
+      submit.disabled = true;
+      try {
+        const result = await api('adminSetSchedule', { email: u.email, workShifts, workDays });
+        closeProfileForm();
+        toast('✅ Đã lưu giờ làm');
+        if (result.email === currentEmail && userProfile) {
+          applyProfile({ ...userProfile, workShifts: result.workShifts, workDays: result.workDays, workStart: result.workStart, workEnd: result.workEnd });
+        }
+        await loadAdminUsers();
+      } catch (err) {
+        if (handleSessionError(err)) return;
+        showFormError('profile-error', err.code === 'VALIDATION' ? err.message : 'Không lưu được, vui lòng thử lại.');
+      } finally {
+        submit.disabled = false;
+      }
+    }
+
+    const SCHEDULE_FIELDS = { workShifts: 'Giờ làm việc', workDays: 'Ngày làm việc', nudgeEmail: 'Email nhắc' };
+
+    function scheduleValueText(field, value) {
+      if (value === null || value === undefined) return '';
+      if (field === 'workShifts') return shiftsText(value);
+      if (field === 'workDays') return workDaysText(value);
+      return value ? 'Bật' : 'Tắt';
+    }
+
+    // Lịch sử chỉnh giờ làm / ngày làm / email nhắc của một người
+    async function showScheduleLog(email) {
+      let data;
+      try {
+        data = await api('adminScheduleLog', { email });
+      } catch (err) {
+        if (!handleSessionError(err)) toast('❌ ' + err.message);
+        return;
+      }
+      const u = adminUsers.find(x => x.email === email);
+      const changes = data.entries.map(e => [
+        `${e.at} · ${scheduleChangeWho(e.by, e.byName, e.email)} · ${SCHEDULE_FIELDS[e.field] || e.field}`,
+        scheduleValueText(e.field, e.old), scheduleValueText(e.field, e.new)
+      ]);
+      const ok = await confirmAction({
+        title: '🕘 Lịch sử chỉnh giờ làm',
+        message: `${adminUserLabel(email)}. ` + (changes.length
+          ? `${changes.length}${data.more ? '+' : ''} lần chỉnh, mới nhất ở trên. Giờ hiện tại: ${shiftsText(profileShifts(u || {}))} (${workDaysText(u?.workDays || [1, 2, 3, 4, 5])}).`
+          : 'Chưa ai chỉnh giờ làm, ngày làm hay email nhắc của người này.'),
+        changes, ok: '✏️ Chỉnh giờ làm', cancel: 'Đóng'
+      });
+      if (ok && u) showProfileForm('admin', u);
     }
 
     function showPasswordForm(forced) {
@@ -4729,9 +4863,13 @@
         adminButton(u.role === 'Quản trị' ? 'Bỏ quyền quản trị' : 'Cấp quyền quản trị', 'admin-role', u.email, u.role === 'Quản trị' ? 'Học viên' : 'Quản trị')
       ].join('');
 
-      const nudgeButton = u.nudgeEmail
+      const nudgeButton = (u.nudgeEmail
         ? adminButton('Tắt email nhắc', 'admin-nudge', u.email, 'off')
-        : adminButton('⏰ Bật email nhắc', 'admin-nudge', u.email, 'on');
+        : adminButton('⏰ Bật email nhắc', 'admin-nudge', u.email, 'on'))
+        + adminButton('🕘 Chỉnh giờ làm', 'admin-schedule', u.email)
+        + adminButton('📜 Lịch sử chỉnh', 'admin-schedule-log', u.email);
+      const changed = u.scheduleChange
+        ? ` · Chỉnh gần nhất: ${escapeHTML(u.scheduleChange.at)} – ${escapeHTML(scheduleChangeWho(u.scheduleChange.by, u.scheduleChange.byName, u.email))}` : '';
 
       return `
       <div class="admin-card">
@@ -4751,7 +4889,7 @@
           <span>Email: <b>${escapeHTML(u.emailStatus || 'Chưa đăng ký')}</b></span>
           <span>Tiến độ EN: ${u.progress.en.mastered}/${u.progress.en.total} từ nhớ chắc · ZH: ${u.progress.zh.mastered}/${u.progress.zh.total} · Học gần nhất: ${lastStudyText(u.study)}</span>
           <span>Đăng ký: ${escapeHTML(u.registeredAt || '–')} · Đăng nhập gần nhất: ${escapeHTML(u.lastLogin || 'chưa có')}</span>
-          <span>Giờ làm: ${escapeHTML(shiftsText(profileShifts(u)))} (${escapeHTML(workDaysText(u.workDays || [1, 2, 3, 4, 5]))}) · Email nhắc: ${u.nudgeEmail ? 'bật' : 'tắt'} · Thông báo: ${u.pushDevices || 0} máy${u.lastNudge ? ` · Nhắc gần nhất: ${escapeHTML(u.lastNudge)}` : ''}</span>
+          <span>Giờ làm: ${escapeHTML(shiftsText(profileShifts(u)))} (${escapeHTML(workDaysText(u.workDays || [1, 2, 3, 4, 5]))}) · Email nhắc: ${u.nudgeEmail ? 'bật' : 'tắt'} · Thông báo: ${u.pushDevices || 0} máy${u.lastNudge ? ` · Nhắc gần nhất: ${escapeHTML(u.lastNudge)}` : ''}${changed}</span>
           ${u.goal ? `<span>Mục tiêu: ${escapeHTML(u.goal)}</span>` : ''}
         </div>
         <div class="admin-actions">${emailButtons}${nudgeButton}${accountButtons}</div>
@@ -6519,7 +6657,12 @@
         showProfileForm('register');
       } else if (action === 'profile-cancel') {
         if (profileFormMode === 'register') showLogin();
-        else setScreen(null);
+        else closeProfileForm();
+      } else if (action === 'admin-schedule') {
+        const u = adminUsers.find(x => x.email === target.dataset.email);
+        if (u) showProfileForm('admin', u);
+      } else if (action === 'admin-schedule-log') {
+        showScheduleLog(target.dataset.email);
       } else if (action === 'password-cancel') {
         if (passwordFormForced) signOut();
         else setScreen(null);
